@@ -183,6 +183,14 @@ app.post("/api/auth/login", async (q, s) => {
   if (u.role === "staff" && u.status === "Closed") {
     return s.status(401).json({ error: "This staff account is closed. Contact the master admin." });
   }
+  if (u.role === "customer") {
+    const custRecord = connected ? await models.customers.findOne({ email }).lean() : memory.customers.find((c) => c.email === email);
+    if (!custRecord) {
+      if (connected) await models.users.deleteMany({ email, role: "customer" });
+      else memory.users = memory.users.filter((x) => !(x.email === email && x.role === "customer"));
+      return s.status(401).json({ error: "Customer account no longer exists. Please contact support or register again." });
+    }
+  }
   if (!await bcrypt.compare(password, u.password)) return s.status(401).json({ error: "Invalid email or password" });
   s.json({ data: { token: jwt.sign({ id: u._id, email: u.email, name: u.name, role: u.role, tokenVersion: u.tokenVersion || 0 }, secret, { expiresIn: "12h" }), user: { email: u.email, name: u.name, role: u.role } } });
 });
@@ -460,6 +468,14 @@ for (const k of names) {
         if (ix >= 0) removed = memory[k].splice(ix, 1)[0];
       }
       if (!removed) return s.status(404).json({ error: "Record not found" });
+      if (k === "customers" && removed && removed.email) {
+        if (connected) await models.users.deleteMany({ email: removed.email, role: "customer" });
+        else memory.users = memory.users.filter((u) => !(u.email === removed.email && u.role === "customer"));
+      }
+      if (k === "users" && removed && removed.role === "customer") {
+        if (connected) await models.customers.deleteMany({ email: removed.email });
+        else memory.customers = memory.customers.filter((c) => c.email !== removed.email);
+      }
       s.json({ data: { deleted: true } });
     } catch (e) {
       s.status(400).json({ error: e.message });
@@ -549,8 +565,13 @@ app.post("/api/admin/clear-data", auth, admin, async (q, s) => {
       else memory[coll] = [];
     }
     if (q.body.wipeCustomers) {
-      if (connected) await models.customers.deleteMany({});
-      else memory.customers = [];
+      if (connected) {
+        await models.customers.deleteMany({});
+        await models.users.deleteMany({ role: "customer" });
+      } else {
+        memory.customers = [];
+        memory.users = memory.users.filter((x) => x.role !== "customer");
+      }
     }
     s.json({ data: { cleared: true, message: "Transactional records have been cleared." } });
   } catch (e) {

@@ -118,6 +118,18 @@ const IconBook = ({ size = 16, className = "" }: { size?: number; className?: st
   </svg>
 );
 
+const IconFilter = ({ size = 15, className = "" }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+);
+
+const IconChevronDown = ({ size = 13, className = "" }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || "/api" });
 const fmt = (n: number | string | undefined | null) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(n) || 0);
 
@@ -237,12 +249,14 @@ export function App() {
   const [toast, T] = useState("");
   const [q, Q] = useState("");
   const [filter, F] = useState("All");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [editing, E] = useState<any>(null);
   const [pageInfo, PageInfo] = useState<Record<string, any>>({});
   const [summary, Summary] = useState<any>(null);
   const [night, N] = useState(() => localStorage.getItem("brightloop_theme") === "night");
   const [showGuide, setShowGuide] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showCustomerBanner, setShowCustomerBanner] = useState(true);
   const [payingInvoice, setPayingInvoice] = useState<any>(null);
   const [user, U] = useState<any>(() => {
     try {
@@ -252,6 +266,17 @@ export function App() {
       return null;
     }
   });
+
+  // Auto-hide the customer notice banner after 5 seconds
+  React.useEffect(() => {
+    if (user?.role === "customer") {
+      setShowCustomerBanner(true);
+      const timer = setTimeout(() => {
+        setShowCustomerBanner(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [user?.email, user?.role]);
 
   const getSubtabs = (p: string) => {
     if (p === "Products & Plans") return ["Products", "Plans"];
@@ -283,6 +308,7 @@ export function App() {
     P(newPage);
     F("All");
     Q("");
+    setFilterOpen(false);
     const available = getSubtabs(newPage);
     if (targetSub && available.includes(targetSub)) {
       setSubTab(targetSub);
@@ -534,7 +560,7 @@ export function App() {
       await api.delete("/" + apiKey + "/" + (item._id || item.id));
       D((x) => ({ ...x, [k2]: x[k2].filter((r: any) => (r._id || r.id) !== (item._id || item.id)) }));
       refreshSummary();
-      notice("Record deleted");
+      notice(k2 === "customers" ? "Customer account deleted and login disabled." : "Record deleted");
     } catch (e: any) {
       notice(e.response?.data?.error || "Could not delete record");
     }
@@ -554,6 +580,21 @@ export function App() {
   let collected = d.invoices.reduce((a: number, x: any) => a + Number(x.paidAmount || 0), 0);
   let out = d.invoices.reduce((a: number, x: any) => a + Number(x.outstandingAmount ?? (x.status === "Paid" ? 0 : x.amount) ?? 0), 0);
   let overdue = d.invoices.filter((x: any) => x.status === "Overdue").length;
+
+  // Real Dynamic Donut / Pie Chart Logic (Zero Fake Colors)
+  const subTotal = d.subscriptions.length;
+  const activeCount = d.subscriptions.filter((x: any) => x.status === "Active").length;
+  const confirmedCount = d.subscriptions.filter((x: any) => ["Confirmed", "Quotation", "Draft"].includes(x.status)).length;
+  const dueCount = d.subscriptions.filter((x: any) => ["Past due", "Overdue"].includes(x.status)).length;
+  const closedCount = d.subscriptions.filter((x: any) => ["Closed", "Canceled", "Paused"].includes(x.status)).length;
+
+  let donutBackground = "#e2e5eb"; // When total is 0, completely neutral empty ring!
+  if (subTotal > 0) {
+    const p1 = (activeCount / subTotal) * 100;
+    const p2 = p1 + (confirmedCount / subTotal) * 100;
+    const p3 = p2 + (dueCount / subTotal) * 100;
+    donutBackground = `conic-gradient(#7455e8 0% ${p1}%, #38bdf8 ${p1}% ${p2}%, #f59e0b ${p2}% ${p3}%, #94a3b8 ${p3}% 100%)`;
+  }
 
   let metrics = [
     ["Total customers", String(summary?.customers ?? d.customers.length), "Registered client accounts", IconUsers],
@@ -579,7 +620,6 @@ export function App() {
 
   const currentSubtabs = getSubtabs(page);
 
-  // Helper for primary action modal
   const openNewModal = () => {
     if (page === "Products & Plans") M(subTab === "Plans" ? "New plan" : "New product");
     else if (page === "Invoices & Payments") M(subTab === "Payments" ? "New payment" : "New invoice");
@@ -679,9 +719,10 @@ export function App() {
         </header>
 
         <article>
-          {user.role === "customer" && (
+          {user.role === "customer" && showCustomerBanner && (
             <div className="customer-notice">
               <span><b>Customer Self-Service Portal</b>: You are logged in as {user.name} ({user.company || user.email}). Your invoices and subscriptions are strictly private and isolated from other clients.</span>
+              <button type="button" className="close-banner-btn" onClick={() => setShowCustomerBanner(false)} title="Dismiss notice">×</button>
             </div>
           )}
 
@@ -825,7 +866,7 @@ export function App() {
                         <CartesianGrid vertical={false} stroke="#edf0f4" />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} />
                         <YAxis tickFormatter={(v) => "₹" + v / 1e3 + "k"} axisLine={false} tickLine={false} />
-                        <Tooltip formatter={fmt} />
+                        <Tooltip formatter={(value: any) => fmt(value)} />
                         <Area dataKey="revenue" stroke="#7556e8" strokeWidth={2.5} fill="url(#f)" />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -834,17 +875,21 @@ export function App() {
 
                 <section className="panel">
                   <b>Subscription overview</b>
-                  <small>Active and lifecycle breakdown</small>
-                  <div className="donut">
-                    <b>{d.subscriptions.length}</b>
+                  <small>Live active and lifecycle breakdown</small>
+                  <div className="donut" style={{ background: donutBackground }}>
+                    <b>{subTotal}</b>
                   </div>
-                  {["Active", "Trial", "Past due", "Canceled"].map((label, i) => {
-                    let count = d.subscriptions.filter((x: any) => x.status === label).length;
-                    let pct = d.subscriptions.length ? (count * 100 / d.subscriptions.length).toFixed(1) : "0.0";
+                  {[
+                    { label: "Active", count: activeCount, colorClass: "" },
+                    { label: "Confirmed / Draft", count: confirmedCount, colorClass: "blue" },
+                    { label: "Past due / Overdue", count: dueCount, colorClass: "orange" },
+                    { label: "Closed / Paused", count: closedCount, colorClass: "gray" }
+                  ].map((item) => {
+                    let pct = subTotal ? ((item.count * 100) / subTotal).toFixed(1) : "0.0";
                     return (
-                      <div className={"legend " + ["", "blue", "orange", "gray"][i]} key={label}>
-                        <span className="legend-dot" /> {label}
-                        <span>{count} ({pct}%)</span>
+                      <div className={"legend " + item.colorClass} key={item.label}>
+                        <span className="legend-dot" /> {item.label}
+                        <span>{item.count} ({pct}%)</span>
                       </div>
                     );
                   })}
@@ -888,7 +933,7 @@ export function App() {
                     <button
                       key={tab}
                       className={`subtab-btn ${subTab === tab ? "active" : ""}`}
-                      onClick={() => { setSubTab(tab); F("All"); Q(""); }}
+                      onClick={() => { setSubTab(tab); F("All"); Q(""); setFilterOpen(false); }}
                     >
                       {tab}
                       <span className="subtab-count">
@@ -957,19 +1002,52 @@ export function App() {
                 </div>
               ) : (
                 <>
-                  <div className="tabs">
-                    {(
-                      k === "invoices" ? ["All", "Draft", "Confirmed", "Sent", "Partial", "Paid", "Overdue", "Cancelled"] :
-                      k === "subscriptions" ? ["All", "Draft", "Quotation", "Confirmed", "Active", "Paused", "Closed"] :
-                      k === "quotations" ? ["All", "Draft", "Sent", "Accepted", "Rejected", "Expired", "Converted"] :
-                      ["All", "Active", "Past due", "Closed"]
-                    ).map((x) => (
-                      <button key={x} className={filter === x ? "on" : ""} onClick={() => F(x)}>{x}</button>
-                    ))}
+                  {/* Clean Filter Dropdown Bar with Bespoke Icon (Replacing sprawling status buttons) */}
+                  <div className="filter-bar">
+                    <div className="filter-dropdown-wrap">
+                      <button
+                        type="button"
+                        className={`filter-btn ${filter !== "All" ? "filter-active" : ""}`}
+                        onClick={() => setFilterOpen(!filterOpen)}
+                      >
+                        <IconFilter size={15} />
+                        <span>Status: <b>{filter}</b></span>
+                        <IconChevronDown size={13} />
+                      </button>
+                      {filterOpen && (
+                        <div className="filter-menu">
+                          {(
+                            k === "invoices" ? ["All", "Draft", "Confirmed", "Sent", "Partial", "Paid", "Overdue", "Cancelled"] :
+                            k === "subscriptions" ? ["All", "Draft", "Quotation", "Confirmed", "Active", "Paused", "Closed"] :
+                            k === "quotations" ? ["All", "Draft", "Sent", "Accepted", "Rejected", "Expired", "Converted"] :
+                            ["All", "Active", "Past due", "Closed"]
+                          ).map((st) => (
+                            <button
+                              key={st}
+                              type="button"
+                              className={filter === st ? "selected" : ""}
+                              onClick={() => { F(st); setFilterOpen(false); }}
+                            >
+                              <span>{st}</span>
+                              {filter === st && <IconCheck size={12} />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {filter !== "All" && (
+                      <div className="filter-chip">
+                        Filtered by: <b>{filter}</b>
+                        <button type="button" onClick={() => F("All")} title="Reset filter">×</button>
+                      </div>
+                    )}
+
                     <button
                       className="export"
+                      style={{ marginLeft: "auto" }}
                       onClick={() => {
-                        const csv = [Object.keys(filtered[0] || {}).join(","), ...filtered.map((r: any) => Object.values(r).map((v) => '"' + String(v ?? "").replaceAll('"', '""') + '"').join(","))].join("\n");
+                        const csv = [Object.keys(filtered[0] || {}).join(","), ...filtered.map((r: any) => Object.values(r).map((v) => '"' + String(v ?? "").replace(/"/g, '""') + '"').join(","))].join("\n");
                         const a = document.createElement("a");
                         a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
                         a.download = (subTab !== "default" ? subTab.toLowerCase() : page.toLowerCase()) + ".csv";
@@ -1680,6 +1758,7 @@ function Table({ rows, onDelete, onEdit, onConvert, onStatusChange, onSend, onPr
 function Form({ kind, record, close, submit, customers = [], staff = [], invoices = [], plans = [], products = [] }: any) {
   const [v, V] = useState<any>(() => ({ status: kind === "New quotation" || kind === "New subscription" ? "Draft" : "Active", ...(record || {}) }));
   const [items, Items] = useState<any[]>(() => record?.items?.length ? record.items : [{ description: "", product: "", quantity: 1, unitPrice: 0, taxRate: 0 }]);
+  const [showAdvancedDiscount, setShowAdvancedDiscount] = useState(false);
   const [variantsList, setVariantsList] = useState<any[]>(() => {
     if (Array.isArray(record?.variants) && record.variants.length > 0) return record.variants;
     return [{ name: "Odoo ERP Connector", type: "Add-on Module", priceDelta: 560 }];
@@ -1701,17 +1780,17 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
 
   const set = (key: string, value: any) => V((old: any) => ({ ...old, [key]: value }));
   const text = (label: string, key: string, type = "text", required = false, props = {}, helperText?: string) => (
-    <label>
+    <label style={{ display: "grid", gap: "5px", margin: "10px 0", fontSize: "11px", fontWeight: 600 }}>
       {label}
-      <input type={type} required={required} value={v[key] ?? ""} onChange={(e) => set(key, type === "number" ? Number(e.target.value) : e.target.value)} {...props} />
+      <input type={type} required={required} value={v[key] ?? ""} onChange={(e) => set(key, type === "number" ? Number(e.target.value) : e.target.value)} {...props} style={{ width: "100%", boxSizing: "border-box" }} />
       {helperText && <span className="form-helper">{helperText}</span>}
     </label>
   );
 
   const choose = (label: string, key: string, values: any[], required = false) => (
-    <label>
+    <label style={{ display: "grid", gap: "5px", margin: "10px 0", fontSize: "11px", fontWeight: 600 }}>
       {label}
-      <select required={required} value={v[key] ?? ""} onChange={(e) => set(key, e.target.value)}>
+      <select required={required} value={v[key] ?? ""} onChange={(e) => set(key, e.target.value)} style={{ width: "100%", boxSizing: "border-box" }}>
         <option value="">Select {label.toLowerCase()}</option>
         {values.map((x) => (
           <option key={x.value ?? x} value={x.value ?? x}>{x.label ?? x}</option>
@@ -1747,7 +1826,6 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
     submit(out);
   };
 
-  // Live profit margin calculation for product form
   const salesPrice = Number(v.salesPrice || 0);
   const costPrice = Number(v.costPrice || 0);
   const grossMargin = salesPrice - costPrice;
@@ -1937,16 +2015,12 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
 
         {isPlan && (
           <>
-            {text("Plan name", "planName", "text", true)}
+            {text("Plan name", "planName", "text", true, { placeholder: "e.g. Business Monthly" })}
             {choose("Product", "product", products.map((x: any) => ({ value: x.name, label: x.name })), true)}
-            {text("Price (₹)", "price", "number", true, { min: 0, step: "0.01" })}
+            {text("Price per seat (₹)", "price", "number", true, { min: 0, step: "0.01" })}
             {choose("Billing frequency", "billingFrequency", ["Daily", "Weekly", "Monthly", "Yearly"], true)}
             {text("Minimum quantity", "minimumQuantity", "number", true, { min: 1 })}
-            {text("Available from", "availableFrom", "date")}
-            {text("Available until", "availableUntil", "date")}
-            {choose("Plan status", "status", ["Active", "Closed", "Paused"], true)}
-            <label className="terms"><input type="checkbox" checked={!!v.autoClose} onChange={(e) => set("autoClose", e.target.checked)} /> Close automatically at end date</label>
-            <label className="terms"><input type="checkbox" checked={!!v.allowRenewal} onChange={(e) => set("allowRenewal", e.target.checked)} /> Allow renewal</label>
+            <label className="terms" style={{ marginTop: "8px" }}><input type="checkbox" checked={v.allowRenewal !== false} onChange={(e) => set("allowRenewal", e.target.checked)} /> Allow recurring automatic renewal</label>
           </>
         )}
 
@@ -1990,29 +2064,42 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
           </fieldset>
         )}
 
+        {/* Simplified, Clean Discount Form */}
         {isDiscount && (
           <>
-            {text("Discount name", "name", "text", true)}
-            {choose("Discount type", "type", ["Percentage", "Fixed"], true)}
-            {text("Discount value", "value", "number", true, { min: 0, step: "0.01" })}
-            {text("Minimum purchase (₹)", "minimumPurchase", "number", false, { min: 0 })}
-            {text("Minimum quantity", "minimumQuantity", "number", false, { min: 0 })}
-            {text("Starts on", "startDate", "date")}
-            {text("Ends on", "endDate", "date")}
-            {text("Usage limit", "usageLimit", "number", false, { min: 1 })}
-            {choose("Applies to", "scope", ["Subscription", "Product", "All"], true)}
-            {choose("Product", "product", [{ value: "", label: "All products" }, ...products.map((x: any) => ({ value: x.name, label: x.name }))])}
+            {text("Discount Name", "name", "text", true, { placeholder: "e.g. Volume 10% Discount" })}
+            {choose("Discount Type", "type", ["Percentage", "Fixed"], true)}
+            {text(v.type === "Fixed" ? "Discount Value (₹)" : "Discount Value (%)", "value", "number", true, { min: 0, step: "0.01", placeholder: v.type === "Fixed" ? "500" : "10" })}
+            {choose("Applies To", "product", [{ value: "", label: "All Products" }, ...products.map((x: any) => ({ value: x.name, label: x.name }))])}
+
+            <div style={{ margin: "10px 0 4px" }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ fontSize: "11px", padding: "5px 10px" }}
+                onClick={() => setShowAdvancedDiscount(!showAdvancedDiscount)}
+              >
+                {showAdvancedDiscount ? "- Hide Advanced Options" : "+ Advanced Options (Min Seats / Dates)"}
+              </button>
+            </div>
+
+            {showAdvancedDiscount && (
+              <div style={{ marginTop: "8px", padding: "12px", background: "#f8f9fc", borderRadius: "8px", border: "1px solid #eaecf1" }}>
+                {text("Minimum Seat Quantity", "minimumQuantity", "number", false, { min: 0 })}
+                {text("Minimum Purchase Amount (₹)", "minimumPurchase", "number", false, { min: 0 })}
+                {text("Valid From Date", "startDate", "date")}
+                {text("Valid Until Date", "endDate", "date")}
+              </div>
+            )}
           </>
         )}
 
+        {/* Simplified, Clean Tax Form */}
         {isTax && (
           <>
-            {text("Tax name", "name", "text", true)}
-            {text("Tax rate (%)", "rate", "number", true, { min: 0, max: 100, step: "0.01" })}
-            {text("Starts on", "startDate", "date")}
-            {text("Ends on", "endDate", "date")}
-            {choose("Applies to", "scope", ["Subscription", "Product", "All"], true)}
-            {v.scope === "Product" && choose("Product", "product", products.map((x: any) => ({ value: x.name, label: x.name })), true)}
+            {text("Tax Name", "name", "text", true, { placeholder: "e.g. GST 18%" })}
+            {text("Tax Rate (%)", "rate", "number", true, { min: 0, max: 100, step: "0.01", placeholder: "18" })}
+            {choose("Applies To", "product", [{ value: "", label: "All Products" }, ...products.map((x: any) => ({ value: x.name, label: x.name }))])}
           </>
         )}
 
