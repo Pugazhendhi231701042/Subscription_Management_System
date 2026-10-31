@@ -1,14 +1,23 @@
 import { Response } from 'express';
-import { prisma } from '../db.js';
+import { db, generateId } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 
 export async function listTaxes(req: AuthenticatedRequest, res: Response) {
   try {
-    const taxes = await prisma.tax.findMany({
-      where: { isActive: true },
-      orderBy: { rate: 'asc' }
-    });
-    return res.json({ success: true, data: taxes });
+    const taxes = db.prepare(`
+      SELECT id, name, rate, tax_type as taxType, is_default as isDefault, is_active as isActive
+      FROM taxes
+      WHERE is_active = 1
+      ORDER BY rate ASC
+    `).all() as any[];
+
+    const formatted = taxes.map(t => ({
+      ...t,
+      isDefault: Boolean(t.isDefault),
+      isActive: Boolean(t.isActive)
+    }));
+
+    return res.json({ success: true, data: formatted });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: 'Failed to retrieve tax rates.' });
   }
@@ -27,22 +36,19 @@ export async function createTax(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ success: false, errors: ['Tax rate must be a non-negative percentage.'] });
     }
 
+    const taxId = generateId('tax');
+    const now = new Date().toISOString();
+
     if (isDefault) {
-      await prisma.tax.updateMany({
-        where: { isDefault: true },
-        data: { isDefault: false }
-      });
+      db.prepare('UPDATE taxes SET is_default = 0').run();
     }
 
-    const tax = await prisma.tax.create({
-      data: {
-        name: name.trim(),
-        rate: parsedRate,
-        isDefault: Boolean(isDefault)
-      }
-    });
+    db.prepare(`
+      INSERT INTO taxes (id, name, rate, tax_type, is_default, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, 'PERCENTAGE', ?, 1, ?, ?)
+    `).run(taxId, name.trim(), parsedRate, isDefault ? 1 : 0, now, now);
 
-    return res.status(201).json({ success: true, message: 'Tax rule created successfully.', data: tax });
+    return res.status(201).json({ success: true, message: 'Tax rule created successfully.', data: { id: taxId } });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: 'Failed to create tax rule.' });
   }

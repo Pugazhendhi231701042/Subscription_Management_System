@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { prisma } from '../db.js';
+import { db, generateId } from '../db.js';
 import { validateUserRegistration, validateEmail, validatePassword } from '../utils/validation.js';
 import { generateToken, AuthenticatedRequest } from '../middleware/auth.js';
 
@@ -9,17 +9,15 @@ export async function register(req: Request, res: Response) {
   try {
     const { name, email, password, companyName, phone, street, city, country } = req.body;
 
-    // Strict validation
     const validation = validateUserRegistration({ name, email, password });
     if (!validation.isValid) {
       return res.status(400).json({ success: false, errors: validation.errors });
     }
 
-    // Check unique email
-    const existing = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() }
-    });
+    const cleanEmail = email.toLowerCase().trim();
 
+    // Check existing email
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
     if (existing) {
       return res.status(400).json({
         success: false,
@@ -27,45 +25,50 @@ export async function register(req: Request, res: Response) {
       });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    const salt = bcrypt.genSaltSync(10);
+    const passwordHash = bcrypt.hashSync(password, salt);
+    const userId = generateId('usr');
+    const customerId = generateId('cust');
+    const now = new Date().toISOString();
 
-    // Create user with CUSTOMER role & linked Customer profile
-    const result = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          name: name.trim(),
-          email: email.toLowerCase().trim(),
-          passwordHash,
-          role: 'CUSTOMER'
-        }
-      });
+    const insertUser = db.prepare(`
+      INSERT INTO users (id, email, name, password_hash, role, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
 
-      const customer = await tx.customer.create({
-        data: {
-          userId: user.id,
-          companyName: (companyName && companyName.trim()) || name.trim(),
-          contactName: name.trim(),
-          email: email.toLowerCase().trim(),
-          phone: phone || null,
-          street: street || null,
-          city: city || null,
-          country: country || 'India',
-          paymentTerms: 'Net 15',
-          status: 'ACTIVE'
-        }
-      });
+    const insertCustomer = db.prepare(`
+      INSERT INTO customers (id, user_id, company_name, contact_name, email, phone, street, city, country, payment_terms, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-      return { user, customer };
+    // Pure SQLite transaction
+    const executeTx = db.transaction(() => {
+      insertUser.run(userId, cleanEmail, name.trim(), passwordHash, 'CUSTOMER', now, now);
+      insertCustomer.run(
+        customerId,
+        userId,
+        (companyName && companyName.trim()) || name.trim(),
+        name.trim(),
+        cleanEmail,
+        phone || null,
+        street || null,
+        city || null,
+        country || 'India',
+        'Net 15',
+        'ACTIVE',
+        now,
+        now
+      );
     });
 
+    executeTx();
+
     const token = generateToken({
-      id: result.user.id,
-      email: result.user.email,
-      role: result.user.role,
-      name: result.user.name,
-      customerId: result.customer.id
+      id: userId,
+      email: cleanEmail,
+      role: 'CUSTOMER',
+      name: name.trim(),
+      customerId
     });
 
     return res.status(201).json({
@@ -73,11 +76,11 @@ export async function register(req: Request, res: Response) {
       message: 'Account created successfully! Welcome to Brightloop.',
       token,
       user: {
-        id: result.user.id,
-        name: result.user.name,
-        email: result.user.email,
-        role: result.user.role,
-        customerId: result.customer.id
+        id: userId,
+        name: name.trim(),
+        email: cleanEmail,
+        role: 'CUSTOMER',
+        customerId
       }
     });
   } catch (error: any) {
@@ -99,16 +102,19 @@ export async function login(req: Request, res: Response) {
       return res.status(400).json({ success: false, errors: ['Password is required.'] });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
-      include: { customer: true }
-    });
+    const cleanEmail = email.toLowerCase().trim();
+    const user = db.prepare(`
+      SELECT u.id, u.name, u.email, u.password_hash, u.role, c.id as customer_id
+      FROM users u
+      LEFT JOIN customers c ON c.user_id = u.id
+      WHERE u.email = ?
+    `).get(cleanEmail) as any;
 
     if (!user) {
       return res.status(401).json({ success: false, errors: ['Invalid email or password.'] });
     }
 
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = bcrypt.compareSync(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ success: false, errors: ['Invalid email or password.'] });
     }
@@ -118,7 +124,7 @@ export async function login(req: Request, res: Response) {
       email: user.email,
       role: user.role,
       name: user.name,
-      customerId: user.customer?.id || null
+      customerId: user.customer_id || null
     });
 
     return res.json({
@@ -130,7 +136,7 @@ export async function login(req: Request, res: Response) {
         name: user.name,
         email: user.email,
         role: user.role,
-        customerId: user.customer?.id || null
+        customerId: user.customer_id || null
       }
     });
   } catch (error: any) {
@@ -142,17 +148,9 @@ export async function login(req: Request, res: Response) {
 export async function forgotPassword(req: Request, res: Response) {
   try {
     const { email } = req.body;
+    const cleanEmail = (email || '').toLowerCase().trim();
 
-    const emailVal = validateEmail(email || '');
-    if (!emailVal.isValid) {
-      return res.status(400).json({ success: false, errors: [emailVal.error || 'Invalid email address.'] });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() }
-    });
-
-    // Even if user not found, don't leak user existence in generic message, but provide simulated link for demo
+    const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(cleanEmail) as any;
     if (!user) {
       return res.json({
         success: true,
@@ -160,28 +158,21 @@ export async function forgotPassword(req: Request, res: Response) {
       });
     }
 
-    // Generate token valid for 1 hour
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+    const resetExpiry = new Date(Date.now() + 3600000).toISOString();
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        resetToken,
-        resetTokenExpiry
-      }
-    });
+    db.prepare('UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?')
+      .run(resetToken, resetExpiry, user.id);
 
     const resetLink = `http://localhost:5173/reset-password?token=${resetToken}`;
 
     return res.json({
       success: true,
       message: `Password reset link generated and dispatched to ${user.email}.`,
-      resetLink, // returned directly for hackathon testing & evaluation ease!
+      resetLink,
       token: resetToken
     });
   } catch (error: any) {
-    console.error('Forgot password error:', error);
     return res.status(500).json({ success: false, error: 'Failed to process password reset request.' });
   }
 }
@@ -199,37 +190,24 @@ export async function resetPassword(req: Request, res: Response) {
       return res.status(400).json({ success: false, errors: [passVal.error || 'Password does not meet security criteria.'] });
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        resetToken: token,
-        resetTokenExpiry: {
-          gt: new Date()
-        }
-      }
-    });
+    const now = new Date().toISOString();
+    const user = db.prepare('SELECT id FROM users WHERE reset_token = ? AND reset_token_expiry > ?').get(token, now) as any;
 
     if (!user) {
       return res.status(400).json({ success: false, errors: ['Invalid or expired reset token. Please request a new reset link.'] });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(newPassword, salt);
+    const salt = bcrypt.genSaltSync(10);
+    const passwordHash = bcrypt.hashSync(newPassword, salt);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash,
-        resetToken: null,
-        resetTokenExpiry: null
-      }
-    });
+    db.prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expiry = ? WHERE id = ?')
+      .run(passwordHash, null, user.id);
 
     return res.json({
       success: true,
       message: 'Password has been reset successfully. You can now log in with your new password.'
     });
   } catch (error: any) {
-    console.error('Reset password error:', error);
     return res.status(500).json({ success: false, error: 'Failed to reset password.' });
   }
 }
@@ -240,10 +218,12 @@ export async function getMe(req: AuthenticatedRequest, res: Response) {
       return res.status(401).json({ success: false, error: 'Not authenticated.' });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      include: { customer: true }
-    });
+    const user = db.prepare(`
+      SELECT u.id, u.name, u.email, u.role, c.id as customer_id, c.company_name
+      FROM users u
+      LEFT JOIN customers c ON c.user_id = u.id
+      WHERE u.id = ?
+    `).get(req.user.id) as any;
 
     if (!user) {
       return res.status(404).json({ success: false, error: 'User record not found.' });
@@ -256,7 +236,7 @@ export async function getMe(req: AuthenticatedRequest, res: Response) {
         name: user.name,
         email: user.email,
         role: user.role,
-        customer: user.customer
+        customer: user.customer_id ? { id: user.customer_id, companyName: user.company_name } : null
       }
     });
   } catch (error: any) {

@@ -20,12 +20,13 @@ dist/
 .env.production.local
 
 # Database
-prisma/*.db
-backend/prisma/*.db
-**/*.db
-**/*.db-journal
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
+subscription.db
 
 # Logs
 npm-debug.log*

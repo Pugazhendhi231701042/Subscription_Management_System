@@ -1,20 +1,35 @@
 import { Response } from 'express';
-import { prisma } from '../db.js';
+import { db, generateId } from '../db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 
 export async function listPlans(req: AuthenticatedRequest, res: Response) {
   try {
-    const plans = await prisma.plan.findMany({
-      where: { isActive: true },
-      include: {
-        product: {
-          include: { variants: true }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const plans = db.prepare(`
+      SELECT p.id, p.product_id as productId, p.name, p.billing_frequency as billingFrequency,
+             p.price, p.min_quantity as minQuantity, p.auto_close_on_end as autoCloseOnEnd,
+             p.allow_pause as allowPause, p.allow_early_close as allowEarlyClose,
+             p.allow_renewal as allowRenewal, p.is_active as isActive, p.created_at as createdAt,
+             pr.name as productName, pr.sales_price as productPrice
+      FROM plans p
+      JOIN products pr ON pr.id = p.product_id
+      WHERE p.is_active = 1
+      ORDER BY p.created_at DESC
+    `).all() as any[];
 
-    return res.json({ success: true, data: plans });
+    const formatted = plans.map(pl => ({
+      ...pl,
+      autoCloseOnEnd: Boolean(pl.autoCloseOnEnd),
+      allowPause: Boolean(pl.allowPause),
+      allowEarlyClose: Boolean(pl.allowEarlyClose),
+      allowRenewal: Boolean(pl.allowRenewal),
+      product: {
+        id: pl.productId,
+        name: pl.productName,
+        salesPrice: pl.productPrice
+      }
+    }));
+
+    return res.json({ success: true, data: formatted });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: 'Failed to retrieve plans.' });
   }
@@ -23,20 +38,18 @@ export async function listPlans(req: AuthenticatedRequest, res: Response) {
 export async function getPlan(req: AuthenticatedRequest, res: Response) {
   try {
     const { id } = req.params;
-    const plan = await prisma.plan.findUnique({
-      where: { id },
-      include: {
-        product: {
-          include: { variants: true }
-        }
-      }
-    });
+    const pl = db.prepare(`
+      SELECT p.*, pr.name as productName
+      FROM plans p
+      JOIN products pr ON pr.id = p.product_id
+      WHERE p.id = ?
+    `).get(id) as any;
 
-    if (!plan) {
+    if (!pl) {
       return res.status(404).json({ success: false, error: 'Plan not found.' });
     }
 
-    return res.json({ success: true, data: plan });
+    return res.json({ success: true, data: pl });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: 'Failed to retrieve plan.' });
   }
@@ -50,8 +63,6 @@ export async function createPlan(req: AuthenticatedRequest, res: Response) {
       billingFrequency,
       price,
       minQuantity,
-      startDate,
-      endDate,
       autoCloseOnEnd,
       allowPause,
       allowEarlyClose,
@@ -59,7 +70,6 @@ export async function createPlan(req: AuthenticatedRequest, res: Response) {
     } = req.body;
 
     const errors: string[] = [];
-
     if (!productId) errors.push('Target product is required.');
     if (!name || name.trim().length === 0) errors.push('Plan name is required.');
 
@@ -74,45 +84,37 @@ export async function createPlan(req: AuthenticatedRequest, res: Response) {
       errors.push('Plan price must be a non-negative number.');
     }
 
-    const parsedMinQty = parseInt(minQuantity) || 1;
-    if (parsedMinQty < 1) {
-      errors.push('Minimum quantity must be at least 1.');
-    }
-
     if (errors.length > 0) {
       return res.status(400).json({ success: false, errors });
     }
 
-    const plan = await prisma.plan.create({
-      data: {
-        productId,
-        name: name.trim(),
-        billingFrequency: freq,
-        price: parsedPrice,
-        minQuantity: parsedMinQty,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        autoCloseOnEnd: Boolean(autoCloseOnEnd),
-        allowPause: allowPause !== undefined ? Boolean(allowPause) : true,
-        allowEarlyClose: allowEarlyClose !== undefined ? Boolean(allowEarlyClose) : true,
-        allowRenewal: allowRenewal !== undefined ? Boolean(allowRenewal) : true
-      },
-      include: {
-        product: true
-      }
-    });
+    const planId = generateId('plan');
+    const now = new Date().toISOString();
 
-    await prisma.auditLog.create({
-      data: {
-        userId: req.user?.id,
-        action: 'CREATE',
-        entityType: 'PLAN',
-        entityId: plan.id,
-        details: `Created plan "${plan.name}" with frequency ${plan.billingFrequency} at ₹${plan.price}`
-      }
-    });
+    db.prepare(`
+      INSERT INTO plans (id, product_id, name, billing_frequency, price, min_quantity, auto_close_on_end, allow_pause, allow_early_close, allow_renewal, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(
+      planId,
+      productId,
+      name.trim(),
+      freq,
+      parsedPrice,
+      parseInt(minQuantity) || 1,
+      autoCloseOnEnd ? 1 : 0,
+      allowPause !== undefined ? (allowPause ? 1 : 0) : 1,
+      allowEarlyClose !== undefined ? (allowEarlyClose ? 1 : 0) : 1,
+      allowRenewal !== undefined ? (allowRenewal ? 1 : 0) : 1,
+      now,
+      now
+    );
 
-    return res.status(201).json({ success: true, message: 'Plan created successfully.', data: plan });
+    db.prepare(`
+      INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(generateId('log'), req.user?.id || null, 'CREATE', 'PLAN', planId, `Created plan "${name}" (${freq} at ₹${parsedPrice})`, now);
+
+    return res.status(201).json({ success: true, message: 'Plan created successfully.', data: { id: planId } });
   } catch (error: any) {
     console.error('Create plan error:', error);
     return res.status(500).json({ success: false, error: 'Failed to create plan.' });
@@ -122,34 +124,37 @@ export async function createPlan(req: AuthenticatedRequest, res: Response) {
 export async function updatePlan(req: AuthenticatedRequest, res: Response) {
   try {
     const { id } = req.params;
-    const updateData: any = {};
+    const { name, billingFrequency, price, minQuantity, autoCloseOnEnd, allowPause, allowEarlyClose, allowRenewal, isActive } = req.body;
 
-    const fields = [
-      'name', 'billingFrequency', 'price', 'minQuantity',
-      'startDate', 'endDate', 'autoCloseOnEnd', 'allowPause',
-      'allowEarlyClose', 'allowRenewal', 'isActive'
-    ];
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE plans
+      SET name = COALESCE(?, name),
+          billing_frequency = COALESCE(?, billing_frequency),
+          price = COALESCE(?, price),
+          min_quantity = COALESCE(?, min_quantity),
+          auto_close_on_end = COALESCE(?, auto_close_on_end),
+          allow_pause = COALESCE(?, allow_pause),
+          allow_early_close = COALESCE(?, allow_early_close),
+          allow_renewal = COALESCE(?, allow_renewal),
+          is_active = COALESCE(?, is_active),
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      name ? name.trim() : null,
+      billingFrequency || null,
+      price !== undefined ? parseFloat(price) : null,
+      minQuantity !== undefined ? parseInt(minQuantity) : null,
+      autoCloseOnEnd !== undefined ? (autoCloseOnEnd ? 1 : 0) : null,
+      allowPause !== undefined ? (allowPause ? 1 : 0) : null,
+      allowEarlyClose !== undefined ? (allowEarlyClose ? 1 : 0) : null,
+      allowRenewal !== undefined ? (allowRenewal ? 1 : 0) : null,
+      isActive !== undefined ? (isActive ? 1 : 0) : null,
+      now,
+      id
+    );
 
-    for (const f of fields) {
-      if (req.body[f] !== undefined) {
-        if (f === 'price') updateData[f] = parseFloat(req.body[f]);
-        else if (f === 'minQuantity') updateData[f] = parseInt(req.body[f]);
-        else if (f === 'startDate' || f === 'endDate') updateData[f] = req.body[f] ? new Date(req.body[f]) : null;
-        else if (['autoCloseOnEnd', 'allowPause', 'allowEarlyClose', 'allowRenewal', 'isActive'].includes(f)) {
-          updateData[f] = Boolean(req.body[f]);
-        } else {
-          updateData[f] = req.body[f];
-        }
-      }
-    }
-
-    const plan = await prisma.plan.update({
-      where: { id },
-      data: updateData,
-      include: { product: true }
-    });
-
-    return res.json({ success: true, message: 'Plan updated successfully.', data: plan });
+    return res.json({ success: true, message: 'Plan updated successfully.' });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: 'Failed to update plan.' });
   }
