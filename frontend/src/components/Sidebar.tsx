@@ -178,17 +178,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
         </button>
 
         {role === 'ADMIN' && (
-          <button
-            onClick={() => onTabChange('staff')}
-            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'staff'
-                ? 'bg-purple-50 text-[#714B67] font-semibold border-l-4 border-[#714B67]'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-            }`}
-          >
-            <UserCheck className="w-4 h-4 text-indigo-600" />
-            <span>Manage Staff</span>
-          </button>
+          <>
+            <button
+              onClick={() => onTabChange('staff')}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'staff'
+                  ? 'bg-purple-50 text-[#714B67] font-semibold border-l-4 border-[#714B67]'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <UserCheck className="w-4 h-4 text-indigo-600" />
+              <span>Manage Staff</span>
+            </button>
+
+            <button
+              onClick={() => onTabChange('audit')}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'audit'
+                  ? 'bg-purple-50 text-[#714B67] font-semibold border-l-4 border-[#714B67]'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4 text-purple-600" />
+              <span>Audit Trail</span>
+            </button>
+          </>
         )}
       </nav>
 

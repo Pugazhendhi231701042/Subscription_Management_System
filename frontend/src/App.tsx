@@ -13,6 +13,7 @@ import { DiscountsPage } from './pages/DiscountsPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { CustomerPortalPage } from './pages/CustomerPortalPage';
 import { StaffPage } from './pages/StaffPage';
+import { AuditLogsPage } from './pages/AuditLogsPage';
 
 const MainLayout: React.FC = () => {
   const { user } = useAuth();
@@ -45,6 +46,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'customers' && <CustomersPage />}
           {activeTab === 'portal' && <CustomerPortalPage />}
           {activeTab === 'staff' && <StaffPage />}
+          {activeTab === 'audit' && <AuditLogsPage />}
         </main>
       </div>
     </div>

@@ -20,7 +20,6 @@ export async function getDashboardMetrics(req: AuthenticatedRequest, res: Respon
       // Active subscriptions for MRR / ARR calculation
       prisma.subscription.findMany({
         where: { status: 'ACTIVE' },
-        include: { plan: true },
         select: {
           id: true,
           totalAmount: true,

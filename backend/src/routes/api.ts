@@ -11,7 +11,8 @@ import { previewDueBilling, runBillingCycle } from '../controllers/billingContro
 import { listInvoices, getInvoice, confirmInvoice, cancelInvoice, sendInvoice } from '../controllers/invoiceController.js';
 import { listPayments, recordPayment } from '../controllers/paymentController.js';
 import { getDashboardMetrics } from '../controllers/dashboardController.js';
-import { listCustomers, getCustomer, getPortalData, createCustomer } from '../controllers/customerController.js';
+import { listCustomers, getCustomer, getPortalData, createCustomer, updatePortalProfile, portalPayInvoice } from '../controllers/customerController.js';
+import { listAuditLogs } from '../controllers/auditController.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 
 export const apiRouter = Router();
@@ -83,6 +84,11 @@ apiRouter.get('/customers', authenticate, requireRole(['ADMIN', 'STAFF']), listC
 apiRouter.post('/customers', authenticate, requireRole(['ADMIN', 'STAFF']), createCustomer);
 apiRouter.get('/customers/:id', authenticate, getCustomer);
 apiRouter.get('/portal', authenticate, getPortalData);
+apiRouter.put('/portal/profile', authenticate, updatePortalProfile);
+apiRouter.post('/portal/invoices/:id/pay', authenticate, portalPayInvoice);
+
+// ================= AUDIT LOGS (ADMIN ONLY) =================
+apiRouter.get('/audit-logs', authenticate, requireRole(['ADMIN']), listAuditLogs);
 
 // ================= EXECUTIVE FINANCE DASHBOARD =================
 apiRouter.get('/dashboard', authenticate, requireRole(['ADMIN', 'STAFF']), getDashboardMetrics);

@@ -106,6 +106,11 @@ export const api = {
   getCustomer: (id: string) => request<any>(`/customers/${id}`),
   createCustomer: (payload: any) => request<any>('/customers', { method: 'POST', body: JSON.stringify(payload) }),
   getPortalData: () => request<any>('/portal'),
+  updatePortalProfile: (payload: any) => request<any>('/portal/profile', { method: 'PUT', body: JSON.stringify(payload) }),
+  portalPayInvoice: (id: string, payload: any = {}) => request<any>(`/portal/invoices/${id}/pay`, { method: 'POST', body: JSON.stringify(payload) }),
+
+  // Audit Logs (Admin only)
+  listAuditLogs: (params: string = '') => request<any>(`/audit-logs${params ? `?${params}` : ''}`),
 
   // Dashboard Metrics
   getDashboardMetrics: () => request<any>('/dashboard')

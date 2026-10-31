@@ -21,7 +21,9 @@ dist/
 
 # Database
 prisma/*.db
-prisma/*.db-journal
+backend/prisma/*.db
+**/*.db
+**/*.db-journal
 *.sqlite
 *.sqlite3
 
