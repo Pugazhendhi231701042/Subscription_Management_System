@@ -11,7 +11,14 @@ import cron from "node-cron";
 dotenv.config();
 const app = express();
 const clientOrigin = String(process.env.CLIENT_URL || "http://localhost:5173").replace(/\/$/, "");
-app.use(cors({ origin: (origin, callback) => callback(null, !origin || origin === clientOrigin) }));
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || origin === clientOrigin || origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:") || /^http:\/\/(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[0-1]))\./.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  }
+}));
 app.use(express.json());
 const authRequestWindows = new Map();
 let nextRateLimitSweep = 0;
