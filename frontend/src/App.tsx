@@ -133,6 +133,81 @@ const links = [
   ["Profile", IconUsers]
 ];
 
+const pageDescriptions: Record<string, string> = {
+  Overview: "Live operational metrics of your active subscriptions, monthly recurring revenue, and cash collections.",
+  Customers: "Client accounts and companies using Brightloop Software.",
+  Staff: "Internal employees. Only the master admin can manage staff accounts.",
+  Work: "Operational task tracker for support and sales teams.",
+  Products: "Catalog of software products, add-on modules, and edition variants.",
+  Plans: "Pricing intervals (Monthly, Yearly, Weekly, Daily) and minimum seat requirements.",
+  Quotations: "Official proposals sent to clients. When accepted, convert them directly into active subscriptions.",
+  "Quotation templates": "Reusable quotation templates with preset line items and validity days.",
+  Subscriptions: "Active recurring software contracts. Automatically bills customer accounts on their renewal date.",
+  Invoices: "Recurring invoices generated from active subscriptions. Shows paid, pending, and overdue balances.",
+  Payments: "Payment ledger tracking every rupee received via UPI, Card, Bank Transfer, or Cash.",
+  Discounts: "Automated discount rules applied when customers meet seat count or spending thresholds.",
+  Taxes: "Automated GST and sales tax calculation rules applied to quotations and billing cycles.",
+  Reports: "Financial revenue reporting, collected cash, and outstanding balances.",
+  Profile: "Manage your contact information and company details."
+};
+
+const pageGuides: Record<string, { title: string; desc: string; actionLabel?: string; actionTarget?: string }> = {
+  Quotations: {
+    title: "Quotations - Sales Proposals",
+    desc: "Proposals sent to clients. Click 'Mark Accepted' then 'Convert to Subscription' to instantly activate their software contract.",
+    actionLabel: "View Subscriptions",
+    actionTarget: "Subscriptions"
+  },
+  Subscriptions: {
+    title: "Subscriptions - Active Software Contracts",
+    desc: "Active subscriptions renew on their Next Invoice Date. Click 'Change Plan' to upgrade/downgrade seats or 'Simulate Billing Run' to invoice now.",
+    actionLabel: "View Invoices",
+    actionTarget: "Invoices"
+  },
+  Invoices: {
+    title: "Invoices - Recurring Bills",
+    desc: "Generated automatically from active subscriptions. Click 'Pay Now' to settle an invoice, or 'Send Invoice' to email it to the client.",
+    actionLabel: "View Payment Ledger",
+    actionTarget: "Payments"
+  },
+  Payments: {
+    title: "Payments - Cash Ledger",
+    desc: "All payments collected via UPI, Card, or Bank Transfer. Recorded payments mark invoices as Paid and refresh live MRR/ARR charts.",
+    actionLabel: "Back to Overview",
+    actionTarget: "Overview"
+  },
+  Customers: {
+    title: "Customers - Client Directory",
+    desc: "Client accounts. Each client gets their own private portal where they only see their own subscriptions and invoices.",
+    actionLabel: "View Products",
+    actionTarget: "Products"
+  },
+  Products: {
+    title: "Products - Software Catalog",
+    desc: "Catalog of software modules and add-ons (such as Odoo ERP Sync) offered to customers with base pricing.",
+    actionLabel: "View Plans",
+    actionTarget: "Plans"
+  },
+  Plans: {
+    title: "Plans - Billing Cadence",
+    desc: "Pricing intervals (Monthly, Yearly, Weekly, Daily) and minimum seat limits applied to products.",
+    actionLabel: "View Quotations",
+    actionTarget: "Quotations"
+  },
+  Discounts: {
+    title: "Discounts - Volume Rules",
+    desc: "Automated discount tiers (e.g. 10% off for 10+ seats). Applied automatically to quotation line items.",
+    actionLabel: "View Taxes",
+    actionTarget: "Taxes"
+  },
+  Taxes: {
+    title: "Taxes - GST & VAT Rules",
+    desc: "Automated GST or sales tax rules (e.g. GST 18%). Automatically computed on subtotal after discounts.",
+    actionLabel: "Back to Overview",
+    actionTarget: "Overview"
+  }
+};
+
 export function App() {
   const [d, D] = useState<Record<string, any[]>>(initial);
   const [page, P] = useState("Overview");
@@ -144,6 +219,8 @@ export function App() {
   const [pageInfo, PageInfo] = useState<Record<string, any>>({});
   const [summary, Summary] = useState<any>(null);
   const [night, N] = useState(() => localStorage.getItem("brightloop_theme") === "night");
+  const [showGuide, setShowGuide] = useState(false);
+  const [payingInvoice, setPayingInvoice] = useState<any>(null);
   const [user, U] = useState<any>(() => {
     try {
       if (!localStorage.getItem("brightloop_token") && !sessionStorage.getItem("brightloop_token")) return null;
@@ -212,7 +289,7 @@ export function App() {
 
   const notice = (x: string) => {
     T(x);
-    setTimeout(() => T(""), 2400);
+    setTimeout(() => T(""), 2600);
   };
 
   function logout() {
@@ -222,6 +299,26 @@ export function App() {
     delete api.defaults.headers.common.Authorization;
     U(null);
     D(initial);
+  }
+
+  async function quickSwitchRole(targetRole: 'admin' | 'staff' | 'customer') {
+    const creds: Record<string, { email: string; password: string }> = {
+      admin: { email: "admin@brightloop.local", password: "Brightloop@2026" },
+      staff: { email: "sales@brightloop.com", password: "Brightloop@2026" },
+      customer: { email: "contact@acmecorp.com", password: "Brightloop@2026" }
+    };
+    try {
+      const r = await api.post("/auth/login", creds[targetRole]);
+      const data = r.data.data;
+      localStorage.setItem("brightloop_token", data.token);
+      localStorage.setItem("brightloop_user", JSON.stringify(data.user));
+      api.defaults.headers.common.Authorization = "Bearer " + data.token;
+      U(data.user);
+      P("Overview");
+      notice(`Switched view to ${targetRole.toUpperCase()}: ${data.user.name}`);
+    } catch {
+      notice("Could not switch role. Start the API server.");
+    }
   }
 
   async function create(v: any) {
@@ -269,7 +366,7 @@ export function App() {
       const result = (await api.post("/quotations/" + (item._id || item.id) + "/convert")).data.data;
       D((x) => ({ ...x, quotations: x.quotations.map((r) => (r._id || r.id) === (item._id || item.id) ? result.quotation : r), subscriptions: [result.subscription, ...x.subscriptions] }));
       refreshSummary();
-      notice("Quotation converted to subscription");
+      notice("Quotation accepted and converted to live active subscription");
     } catch (e: any) { notice(e.response?.data?.error || "Accept the quotation before conversion"); }
   }
 
@@ -280,13 +377,36 @@ export function App() {
 
   async function updateStatus(item: any, status: string) {
     try {
-      const key = page === "Invoices" ? "invoices" : page === "Staff" ? "staff" : page === "Work" ? "workItems" : "subscriptions";
-      const endpoint = key === "staff" ? "/users/" + (item._id || item.id) : key === "workItems" ? "/workItems/" + (item._id || item.id) : key === "invoices" ? "/invoices/" + (item._id || item.id) + "/status" : "/subscriptions/" + (item._id || item.id) + "/status";
-      const updated = (await (["staff", "workItems"].includes(key) ? api.patch(endpoint, { status }) : api.post(endpoint, { status }))).data.data;
+      const key = page === "Invoices" ? "invoices" : page === "Staff" ? "staff" : page === "Work" ? "workItems" : page === "Quotations" ? "quotations" : "subscriptions";
+      const endpoint = key === "staff" ? "/users/" + (item._id || item.id) : key === "workItems" ? "/workItems/" + (item._id || item.id) : key === "quotations" ? "/quotations/" + (item._id || item.id) : key === "invoices" ? "/invoices/" + (item._id || item.id) + "/status" : "/subscriptions/" + (item._id || item.id) + "/status";
+      const updated = (await (["staff", "workItems", "quotations"].includes(key) ? api.patch(endpoint, { status }) : api.post(endpoint, { status }))).data.data;
       D((x) => ({ ...x, [key]: x[key].map((row) => (row._id || row.id) === (item._id || item.id) ? updated : row) }));
       refreshSummary();
       notice("Status updated to " + status);
     } catch (e: any) { notice(e.response?.data?.error || "Could not update status"); }
+  }
+
+  async function payInvoice(item: any, method: string = "UPI") {
+    try {
+      const amt = Number(item.outstandingAmount ?? item.total ?? item.amount ?? 0);
+      await api.post("/payments", {
+        invoice: item._id || item.id,
+        amount: amt,
+        paymentMethod: method,
+        customer: item.customer || user?.name || "Customer",
+        paymentDate: new Date().toISOString()
+      });
+      notice(`Payment of ${fmt(amt)} recorded successfully via ${method}`);
+      setPayingInvoice(null);
+      refreshSummary();
+      const [i, p] = await Promise.all([
+        api.get("/invoices", { params: { page: 1, limit: 100 } }),
+        api.get("/payments", { params: { page: 1, limit: 100 } })
+      ]);
+      D((x) => ({ ...x, invoices: i.data.data, payments: p.data.data }));
+    } catch (e: any) {
+      notice(e.response?.data?.error || "Could not process payment");
+    }
   }
 
   let k = pageMap[page] || "subscriptions";
@@ -320,7 +440,7 @@ export function App() {
   async function runBilling() {
     try {
       const result = (await api.post("/billing/run")).data.data;
-      notice(`${result.created} invoice(s) generated`);
+      notice(`${result.created} invoice(s) generated for subscriptions due today`);
       refreshSummary();
       const [i, sub] = await Promise.all([api.get("/invoices", { params: { page: 1, limit: 100 } }), api.get("/subscriptions", { params: { page: 1, limit: 100 } })]);
       D((x) => ({ ...x, invoices: i.data.data, subscriptions: sub.data.data }));
@@ -356,13 +476,13 @@ export function App() {
   let overdue = d.invoices.filter((x: any) => x.status === "Overdue").length;
 
   let metrics = [
-    ["Total customers", String(summary?.customers ?? d.customers.length), "Active accounts", IconUsers],
-    ["Active subscriptions", String(summary?.activeSubscriptions ?? active.length), "Live contracts", IconRepeat],
-    ["Monthly recurring revenue", fmt(summary?.mrr ?? mrr), "Live MRR", IconCreditCard],
-    ["Annual recurring revenue", fmt(summary?.arr ?? arr), "Projected ARR", IconCreditCard],
-    ["Collected revenue", fmt(summary?.collected ?? collected), "Verified payments", IconCreditCard],
-    ["Outstanding payments", fmt(summary?.outstanding ?? out), "Pending collection", IconActivity],
-    ["Overdue invoices", String(summary?.overdue ?? overdue), "Action required", IconFileText]
+    ["Total customers", String(summary?.customers ?? d.customers.length), "Registered client accounts", IconUsers],
+    ["Active subscriptions", String(summary?.activeSubscriptions ?? active.length), "Live software contracts", IconRepeat],
+    ["Monthly recurring revenue (MRR)", fmt(summary?.mrr ?? mrr), "Predictable monthly revenue", IconCreditCard],
+    ["Annual recurring revenue (ARR)", fmt(summary?.arr ?? arr), "Projected annual run-rate", IconCreditCard],
+    ["Collected revenue", fmt(summary?.collected ?? collected), "Verified payments received", IconCreditCard],
+    ["Outstanding balance", fmt(summary?.outstanding ?? out), "Unpaid invoices awaiting payment", IconActivity],
+    ["Overdue invoices", String(summary?.overdue ?? overdue), "Past due bills needing follow-up", IconFileText]
   ];
 
   if (!user) return <Auth onLogin={(u: any) => U(u)} />;
@@ -379,9 +499,9 @@ export function App() {
         <div className="workspace">
           <div className="workspace-badge">
             <span className="workspace-dot" />
-            <b>Brightloop</b>
+            <b>Brightloop Software</b>
           </div>
-          <small>Workspace</small>
+          <small>Subscription Management</small>
         </div>
         <label>WORKSPACE</label>
         {visibleLinks.map(([n, I]: any) => (
@@ -399,7 +519,7 @@ export function App() {
             <i>{(user.name || user.email || "U").slice(0, 1).toUpperCase()}</i>
             <span>
               <b>{user.name || user.email}</b>
-              <small>{user.role}</small>
+              <small>{user.role === 'admin' ? 'Master Admin' : user.role === 'staff' ? 'Staff Sales' : 'Customer Account'}</small>
             </span>
             <button onClick={logout}>Log out</button>
           </div>
@@ -408,17 +528,35 @@ export function App() {
 
       <main>
         <header>
-          <span>Workspace / <b>{page}</b></span>
+          <span>
+            Workspace / <b>{page}</b>
+            <span className="role-pill" style={{ marginLeft: "14px" }}>
+              {user.role === "admin" ? "Admin Mode" : user.role === "staff" ? "Staff Mode" : "Customer Portal"}
+            </span>
+          </span>
+
           <nav className="mobile-nav">
             <select aria-label="Choose a page" value={page} onChange={(e) => { P(e.target.value); F("All"); Q(""); }}>
               {visibleLinks.map(([name]) => <option key={name as string} value={name as string}>{name as string}</option>)}
             </select>
           </nav>
+
           <div className="headright">
+            <button className="guide-btn" onClick={() => setShowGuide(true)} title="Understand how Brightloop works in 2 minutes">
+              (?) How it works
+            </button>
+            <div className="demonav" title="Click to test role view">
+              <span style={{ fontSize: "10px", color: "#8b909d", marginRight: "2px" }}>Switch role:</span>
+              <button className={user.role === "admin" ? "active" : ""} onClick={() => quickSwitchRole("admin")}>Admin</button>
+              <button className={user.role === "staff" ? "active" : ""} onClick={() => quickSwitchRole("staff")}>Staff</button>
+              <button className={user.role === "customer" ? "active" : ""} onClick={() => quickSwitchRole("customer")}>Customer</button>
+            </div>
+
             <label>
               <IconSearch size={15} />
               <input placeholder="Search records..." value={q} onChange={(e) => Q(e.target.value)} />
             </label>
+
             <button
               className="theme-toggle"
               aria-label={night ? "Switch to light mode" : "Switch to night mode"}
@@ -437,11 +575,48 @@ export function App() {
         </header>
 
         <article>
+          {user.role === "customer" && (
+            <div className="customer-notice">
+              <span><b>Customer Self-Service Portal</b>: You are logged in as {user.name} ({user.company || user.email}). Your invoices and subscriptions are strictly private and isolated from other clients.</span>
+            </div>
+          )}
+
+          {user.role === "customer" && (
+            <div className="customer-hero">
+              <div className="customer-hero-info">
+                <b>Welcome, {user.name}!</b>
+                <p>Customer Account: <b>{user.company || user.name}</b> ({user.email}). View your active software plans, monitor renewals, and settle outstanding invoices securely.</p>
+              </div>
+              <div className="customer-hero-stats">
+                <div className="customer-hero-stat">
+                  <small>Active Contract</small>
+                  <strong>{d.subscriptions.find((s: any) => s.status === "Active")?.plan || "Business Software - Monthly"}</strong>
+                </div>
+                <div className="customer-hero-stat">
+                  <small>Outstanding Due</small>
+                  <strong>{fmt(out)}</strong>
+                </div>
+                {d.invoices.some((inv: any) => ["Draft", "Confirmed", "Sent", "Partial", "Overdue"].includes(inv.status)) && (
+                  <button
+                    className="primary"
+                    style={{ padding: "8px 16px", fontSize: "12px", whiteSpace: "nowrap" }}
+                    onClick={() => {
+                      const openInv = d.invoices.find((inv: any) => ["Draft", "Confirmed", "Sent", "Partial", "Overdue"].includes(inv.status));
+                      if (openInv) setPayingInvoice(openInv);
+                    }}
+                  >
+                    Pay Invoice ({fmt(out)})
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="title">
             <div>
-              <small>{page === "Overview" ? new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase() : "WORKSPACE"}</small>
-              <h1>{page === "Overview" ? "Good morning, " + (user.name || "there") : page}</h1>
-              <p>{page === "Overview" ? "Here is an executive snapshot of your recurring revenue and subscriptions today." : "Manage your " + page.toLowerCase() + " and operational records."}</p>
+              <small>{page === "Overview" ? new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase() : "BRIGHTLOOP ERP"}</small>
+              <h1>{page === "Overview" ? (user.role === "customer" ? "My Customer Portal" : "Good morning, " + (user.name || "there")) : page}</h1>
+              <p>{pageDescriptions[page] || "Manage your subscription operations."}</p>
             </div>
             {user.role !== "customer" && (
               <button
@@ -467,6 +642,55 @@ export function App() {
             )}
           </div>
 
+          {page === "Overview" && user.role !== "customer" && (
+            <div className="flow-banner">
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Products")}>
+                <span className="flow-num">1</span>
+                <div><b>1. Products & Plans</b><small>What Brightloop sells</small></div>
+              </div>
+              <span className="flow-arrow">-&gt;</span>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Quotations")}>
+                <span className="flow-num">2</span>
+                <div><b>2. Quotation</b><small>Offer sent to lead</small></div>
+              </div>
+              <span className="flow-arrow">-&gt;</span>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Subscriptions")}>
+                <span className="flow-num">3</span>
+                <div><b>3. Subscription</b><small>Active recurring plan</small></div>
+              </div>
+              <span className="flow-arrow">-&gt;</span>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Invoices")}>
+                <span className="flow-num">4</span>
+                <div><b>4. Auto Invoicing</b><small>Monthly bill generated</small></div>
+              </div>
+              <span className="flow-arrow">-&gt;</span>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Payments")}>
+                <span className="flow-num">5</span>
+                <div><b>5. Payment</b><small>Reconciled & paid</small></div>
+              </div>
+            </div>
+          )}
+
+          {page === "Overview" && user.role !== "customer" && (
+            <div className="demo-flow-strip">
+              <span>Interactive 60-Second Demo Flow:</span>
+              <div className="demo-flow-buttons">
+                <button onClick={() => P("Quotations")}>1. View Quotations</button>
+                <button onClick={() => {
+                  const acceptedQuote = d.quotations.find((q: any) => q.status === "Accepted");
+                  if (acceptedQuote) {
+                    convertQuote(acceptedQuote);
+                  } else {
+                    P("Quotations");
+                    notice("Look for an Accepted quotation to convert, or click Mark Accepted on a Draft quote");
+                  }
+                }}>2. Convert Quote to Subscription</button>
+                <button onClick={runBilling}>3. Run Monthly Billing Run</button>
+                <button onClick={() => P("Invoices")}>4. Settle Invoice & Update Revenue</button>
+              </div>
+            </div>
+          )}
+
           {page === "Profile" ? (
             <ProfilePanel user={user} notify={notice} />
           ) : page === "Overview" || page === "Reports" ? (
@@ -480,7 +704,7 @@ export function App() {
                     </small>
                     <strong>{x[1]}</strong>
                     <p>
-                      <IconArrowUpRight size={13} /> {x[2]} <span>calculated from records</span>
+                      <IconArrowUpRight size={13} /> {x[2]}
                     </p>
                   </section>
                 ))}
@@ -491,10 +715,10 @@ export function App() {
                   <div className="panelhead">
                     <div>
                       <b>Revenue over time</b>
-                      <small>Recurring revenue performance</small>
+                      <small>Historical collections from subscriptions</small>
                     </div>
                     <div className="panelactions">
-                      {user.role === "admin" && <button onClick={runBilling}>Generate due invoices</button>}
+                      {user.role === "admin" && <button onClick={runBilling}>Simulate monthly billing run</button>}
                     </div>
                   </div>
                   <div className="chart">
@@ -540,16 +764,16 @@ export function App() {
                   <div className="panelhead">
                     <div>
                       <b>Recent subscriptions</b>
-                      <small>Latest customer account activity</small>
+                      <small>Latest accounts created and renewed</small>
                     </div>
-                    <a onClick={() => P("Subscriptions")}>View all</a>
+                    <a onClick={() => P("Subscriptions")}>View all subscriptions</a>
                   </div>
                   <Table rows={d.subscriptions} />
                 </section>
 
                 <section className="panel">
                   <b>Upcoming renewals</b>
-                  <small>Next 30 days</small>
+                  <small>Next 30 days of subscription cycles</small>
                   {d.subscriptions.slice(0, 4).map((x: any, i: number) => (
                     <div className="renew" key={i}>
                       <i>{(x.customer || "C")[0]}</i>
@@ -565,6 +789,20 @@ export function App() {
             </>
           ) : (
             <section className="panel listing">
+              {pageGuides[page] && (
+                <div className="page-guide">
+                  <div className="page-guide-content">
+                    <b>{pageGuides[page].title}</b>
+                    <p>{pageGuides[page].desc}</p>
+                  </div>
+                  {pageGuides[page].actionTarget && (
+                    <div className="page-guide-action">
+                      <button onClick={() => P(pageGuides[page].actionTarget!)}>{pageGuides[page].actionLabel}</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="tabs">
                 {(
                   page === "Work" ? ["All", "Open", "In progress", "Blocked", "Closed"] :
@@ -590,32 +828,40 @@ export function App() {
                 </button>
               </div>
 
-              <Table
-                rows={filtered}
-                onDelete={user.role === "customer" || (k === "workItems" && user.role !== "admin") ? null : (row: any) => remove(k, row)}
-                onConvert={k === "quotations" ? (row: any) => convertQuote(row) : null}
-                onStatusChange={(k === "workItems" && user.role !== "customer") || (k === "staff" && user.role === "admin") || k === "subscriptions" || (k === "invoices" && user.role !== "customer") ? updateStatus : null}
-                onChangePlan={user.role === "customer" && k === "subscriptions" ? openPlanChange : null}
-                onSend={k === "invoices" && user.role !== "customer" ? sendInvoice : null}
-                onPrint={k === "invoices" ? printInvoice : null}
-                onEdit={user.role === "customer" || (k === "workItems" && user.role !== "admin") ? null : (row: any) => {
-                  E({ key: k, item: row });
-                  M(
-                    k === "staff" ? "New staff" :
-                    k === "workItems" ? "New work item" :
-                    k === "customers" ? "New customer" :
-                    k === "products" ? "New product" :
-                    k === "plans" ? "New plan" :
-                    k === "quotations" ? "New quotation" :
-                    k === "quotationTemplates" ? "New quotation template" :
-                    k === "subscriptions" ? "New subscription" :
-                    k === "invoices" ? "New invoice" :
-                    k === "payments" ? "New payment" :
-                    k === "discounts" ? "New discount" :
-                    "New tax"
-                  );
-                }}
-              />
+              {filtered.length === 0 ? (
+                <div className="table-empty">
+                  <p>No records found for "{filter}".</p>
+                  {user.role !== "customer" && <small>Use the button above to add a new record to this section.</small>}
+                </div>
+              ) : (
+                <Table
+                  rows={filtered}
+                  onDelete={user.role === "customer" || (k === "workItems" && user.role !== "admin") ? null : (row: any) => remove(k, row)}
+                  onConvert={k === "quotations" ? (row: any) => convertQuote(row) : null}
+                  onStatusChange={(k === "workItems" && user.role !== "customer") || (k === "staff" && user.role === "admin") || k === "subscriptions" || k === "quotations" || (k === "invoices" && user.role !== "customer") ? updateStatus : null}
+                  onChangePlan={user.role === "customer" && k === "subscriptions" ? openPlanChange : null}
+                  onSend={k === "invoices" && user.role !== "customer" ? sendInvoice : null}
+                  onPrint={k === "invoices" ? printInvoice : null}
+                  onPay={k === "invoices" ? (row: any) => setPayingInvoice(row) : null}
+                  onEdit={user.role === "customer" || (k === "workItems" && user.role !== "admin") ? null : (row: any) => {
+                    E({ key: k, item: row });
+                    M(
+                      k === "staff" ? "New staff" :
+                      k === "workItems" ? "New work item" :
+                      k === "customers" ? "New customer" :
+                      k === "products" ? "New product" :
+                      k === "plans" ? "New plan" :
+                      k === "quotations" ? "New quotation" :
+                      k === "quotationTemplates" ? "New quotation template" :
+                      k === "subscriptions" ? "New subscription" :
+                      k === "invoices" ? "New invoice" :
+                      k === "payments" ? "New payment" :
+                      k === "discounts" ? "New discount" :
+                      "New tax"
+                    );
+                  }}
+                />
+              )}
 
               {pageInfo[k]?.page < pageInfo[k]?.totalPages && (
                 <div className="pagination">
@@ -644,6 +890,135 @@ export function App() {
           templates={d.quotationTemplates}
           staff={d.staff}
         />
+      )}
+
+      {showGuide && (
+        <div className="backdrop" onClick={() => setShowGuide(false)}>
+          <div className="guide-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+              <div>
+                <h2>How Brightloop Works</h2>
+                <p style={{ margin: 0 }}>A complete subscription lifecycle and automated recurring billing system</p>
+              </div>
+              <button className="secondary" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => setShowGuide(false)}>Close</button>
+            </div>
+
+            <div className="guide-grid" style={{ marginTop: "16px" }}>
+              <div className="guide-card">
+                <div className="guide-card-head">
+                  <span className="guide-card-num">1</span>
+                  <b>Products & Plans</b>
+                </div>
+                <p>What the company sells (e.g. Business Software) and billing cadence (Monthly ₹1,000, Yearly ₹10,000) with seat quantities.</p>
+              </div>
+
+              <div className="guide-card">
+                <div className="guide-card-head">
+                  <span className="guide-card-num">2</span>
+                  <b>Quotations</b>
+                </div>
+                <p>Official sales proposals sent to clients with GST tax and volume discounts calculated automatically. Client reviews and accepts.</p>
+              </div>
+
+              <div className="guide-card">
+                <div className="guide-card-head">
+                  <span className="guide-card-num">3</span>
+                  <b>Active Subscriptions</b>
+                </div>
+                <p>Accepted quotations convert to recurring contracts. The system tracks start dates, renewal cadences, and next invoice dates.</p>
+              </div>
+
+              <div className="guide-card">
+                <div className="guide-card-head">
+                  <span className="guide-card-num">4</span>
+                  <b>Automated Invoicing</b>
+                </div>
+                <p>On each renewal date (or when you click 'Simulate Monthly Billing Run'), the engine automatically generates recurring invoices.</p>
+              </div>
+
+              <div className="guide-card" style={{ gridColumn: "1 / -1" }}>
+                <div className="guide-card-head">
+                  <span className="guide-card-num">5</span>
+                  <b>Payments & Live Revenue Tracking</b>
+                </div>
+                <p>Clients pay invoices online via Card or UPI. Balances update to 'Paid' and live MRR, ARR, and cash metrics refresh automatically.</p>
+              </div>
+            </div>
+
+            <div className="guide-roles">
+              <b>3 User Roles & Data Privacy:</b>
+              <ul>
+                <li><b>Admin (Master Owner):</b> Full control over products, plans, taxes, discounts, staff team, and financial reports.</li>
+                <li><b>Staff (Sales & Operations):</b> Creates customer proposals, converts quotations, and handles invoices.</li>
+                <li><b>Customer (Client Portal):</b> Strictly isolated. Customer A can never see Customer B's subscriptions or invoices.</li>
+              </ul>
+            </div>
+
+            <div className="guide-modal-actions">
+              <button
+                className="secondary"
+                onClick={() => {
+                  setShowGuide(false);
+                  quickSwitchRole("customer");
+                }}
+              >
+                Test Customer Portal
+              </button>
+              <button
+                className="primary"
+                onClick={() => {
+                  setShowGuide(false);
+                  P("Quotations");
+                  notice("Welcome to Quotations! Review Acme Corp's quote or create a new one.");
+                }}
+              >
+                Start Exploring
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {payingInvoice && (
+        <div className="backdrop" onClick={() => setPayingInvoice(null)}>
+          <div className="guide-modal-box" style={{ width: "min(460px, 94vw)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <h2 style={{ margin: 0 }}>Pay Invoice {payingInvoice.number}</h2>
+              <button className="secondary" style={{ padding: "4px 8px", fontSize: "11px" }} onClick={() => setPayingInvoice(null)}>Close</button>
+            </div>
+
+            <p style={{ margin: "0 0 16px" }}>
+              Customer: <b>{payingInvoice.customer}</b><br />
+              Due Amount: <b style={{ fontSize: "16px", color: "#6748d9" }}>{fmt(payingInvoice.outstandingAmount ?? payingInvoice.total ?? payingInvoice.amount)}</b>
+            </p>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const method = (form.elements.namedItem("method") as HTMLSelectElement).value;
+              payInvoice(payingInvoice, method);
+            }}>
+              <label style={{ display: "block", marginBottom: "14px", fontSize: "12px", fontWeight: 600 }}>
+                Payment Method:
+                <select name="method" style={{ width: "100%", marginTop: "6px", height: "36px", borderRadius: "6px", border: "1px solid #d3d7e2", padding: "0 8px", font: "inherit" }}>
+                  <option value="UPI">UPI / Google Pay / PhonePe</option>
+                  <option value="Card">Credit or Debit Card</option>
+                  <option value="Bank Transfer">Bank Transfer (NEFT / RTGS)</option>
+                  <option value="Cash">Direct Cash Settlement</option>
+                </select>
+              </label>
+
+              <div style={{ background: "#f8f9fc", border: "1px solid #eaecf2", borderRadius: "8px", padding: "10px 14px", marginBottom: "16px", fontSize: "11px", color: "#6b7282" }}>
+                This payment will be verified and recorded in the Brightloop ledger. The invoice will be marked as <b>Paid</b> immediately.
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                <button type="button" className="secondary" onClick={() => setPayingInvoice(null)}>Cancel</button>
+                <button type="submit" className="primary">Confirm Payment of {fmt(payingInvoice.outstandingAmount ?? payingInvoice.total ?? payingInvoice.amount)}</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {toast && (
@@ -804,11 +1179,14 @@ function Auth({ onLogin }: any) {
 
           {mode === "login" && (
             <div className="demologins">
-              <b>Quick Demo Access</b>
-              <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                <button type="button" className="secondary" style={{ padding: "4px 8px", fontSize: "11px" }} onClick={() => setDemo("admin@brightloop.local", "Brightloop@2026")}>Admin</button>
-                <button type="button" className="secondary" style={{ padding: "4px 8px", fontSize: "11px" }} onClick={() => setDemo("sales@brightloop.com", "Brightloop@2026")}>Staff</button>
-                <button type="button" className="secondary" style={{ padding: "4px 8px", fontSize: "11px" }} onClick={() => setDemo("contact@acmecorp.com", "Brightloop@2026")}>Customer</button>
+              <b>Choose a Persona to Test (1-Click Login):</b>
+              <small style={{ color: "#747988", display: "block", margin: "4px 0 8px" }}>
+                Admin (Full control) · Staff (Sales & Operations) · Customer (Acme Corp Portal)
+              </small>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button type="button" className="secondary" style={{ padding: "5px 9px", fontSize: "11px", flex: 1 }} onClick={() => setDemo("admin@brightloop.local", "Brightloop@2026")}>Admin</button>
+                <button type="button" className="secondary" style={{ padding: "5px 9px", fontSize: "11px", flex: 1 }} onClick={() => setDemo("sales@brightloop.com", "Brightloop@2026")}>Staff</button>
+                <button type="button" className="secondary" style={{ padding: "5px 9px", fontSize: "11px", flex: 1 }} onClick={() => setDemo("contact@acmecorp.com", "Brightloop@2026")}>Customer</button>
               </div>
             </div>
           )}
@@ -883,8 +1261,13 @@ function Auth({ onLogin }: any) {
   );
 }
 
-function Table({ rows, onDelete, onEdit, onConvert, onStatusChange, onSend, onPrint, onChangePlan }: any) {
+function Table({ rows, onDelete, onEdit, onConvert, onStatusChange, onSend, onPrint, onChangePlan, onPay }: any) {
   const nextStatuses = (row: any) => {
+    if (onConvert) {
+      if (row.status === "Draft") return ["Sent", "Accepted"];
+      if (row.status === "Sent") return ["Accepted", "Declined"];
+      return [];
+    }
     if (onPrint) {
       if (row.status === "Draft") return ["Confirmed", "Cancelled"];
       if (["Confirmed", "Partial", "Overdue"].includes(row.status)) return ["Sent", "Cancelled"];
@@ -913,7 +1296,7 @@ function Table({ rows, onDelete, onEdit, onConvert, onStatusChange, onSend, onPr
             <th>{rows.some((r: any) => r.title) ? "WORK DETAILS" : "PLAN / DETAILS"}</th>
             <th>AMOUNT</th>
             <th>STATUS</th>
-            {(onEdit || onDelete || onConvert || onStatusChange || onSend || onPrint || onChangePlan) && <th>ACTIONS</th>}
+            {(onEdit || onDelete || onConvert || onStatusChange || onSend || onPrint || onChangePlan || onPay) && <th>ACTIONS</th>}
           </tr>
         </thead>
         <tbody>
@@ -932,19 +1315,48 @@ function Table({ rows, onDelete, onEdit, onConvert, onStatusChange, onSend, onPr
                 </span>
                 {x.completedAt && <small className="table-sub">Completed {new Date(x.completedAt).toLocaleString()}</small>}
               </td>
-              {(onEdit || onDelete || onConvert || onStatusChange || onSend || onPrint || onChangePlan) && (
+              {(onEdit || onDelete || onConvert || onStatusChange || onSend || onPrint || onChangePlan || onPay) && (
                 <td className="rowactions">
-                  {onConvert && x.status === "Accepted" && <button className="edit-row" onClick={() => onConvert(x)}>Convert</button>}
-                  {onChangePlan && ["Active", "Paused"].includes(x.status) && <button className="edit-row" onClick={() => onChangePlan(x)}>Change plan</button>}
+                  {onConvert && x.status === "Accepted" && (
+                    <button className="edit-row" style={{ background: "#10b981", color: "#fff", borderColor: "#10b981", fontWeight: 600 }} onClick={() => onConvert(x)} title="Convert quotation to active subscription">
+                      Convert to Subscription
+                    </button>
+                  )}
+                  {onChangePlan && ["Active", "Paused"].includes(x.status) && (
+                    <button className="edit-row" onClick={() => onChangePlan(x)}>
+                      Change Plan
+                    </button>
+                  )}
                   {onStatusChange && nextStatuses(x).map((status: string) => (
                     <button key={status} className="edit-row" onClick={() => onStatusChange(x, status)}>
-                      {status === "Closed" ? "Cancel" : status === "Paused" ? "Pause" : status === "Active" ? "Resume" : status}
+                      {status === "Closed" ? "Cancel" : status === "Paused" ? "Pause" : status === "Active" ? "Activate" : status === "Accepted" ? "Mark Accepted" : status}
                     </button>
                   ))}
-                  {onSend && ["Confirmed", "Sent", "Partial", "Overdue"].includes(x.status) && <button className="edit-row" onClick={() => onSend(x)}>Send</button>}
-                  {onPrint && <button className="edit-row" onClick={() => onPrint(x)}>Print</button>}
-                  {onEdit && <button className="edit-row" onClick={() => onEdit(x)}>Edit</button>}
-                  {onDelete && <button className="delete-row" onClick={() => onDelete(x)}>Delete</button>}
+                  {onPay && ["Confirmed", "Sent", "Partial", "Overdue", "Draft"].includes(x.status) && (
+                    <button className="edit-row" style={{ background: "#7455e8", color: "#fff", borderColor: "#7455e8", fontWeight: 600 }} onClick={() => onPay(x)}>
+                      Pay Now
+                    </button>
+                  )}
+                  {onSend && ["Confirmed", "Sent", "Partial", "Overdue"].includes(x.status) && (
+                    <button className="edit-row" onClick={() => onSend(x)}>
+                      Send Invoice
+                    </button>
+                  )}
+                  {onPrint && (
+                    <button className="edit-row" onClick={() => onPrint(x)}>
+                      Print / PDF
+                    </button>
+                  )}
+                  {onEdit && (
+                    <button className="edit-row" onClick={() => onEdit(x)}>
+                      Edit
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button className="delete-row" onClick={() => onDelete(x)}>
+                      Delete
+                    </button>
+                  )}
                 </td>
               )}
             </tr>

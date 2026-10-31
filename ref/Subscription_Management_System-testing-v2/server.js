@@ -446,10 +446,13 @@ for (const k of names) {
   });
 }
 app.post("/api/payments", auth, async (q, s) => {
-  if (q.user.role === "customer") return s.status(403).json({ error: "Only staff can record payments" });
   try {
     let inv = connected ? await models.invoices.findById(q.body.invoice) : memory.invoices.find((x) => String(x._id) === q.body.invoice);
     if (!inv) return s.status(404).json({ error: "Invoice not found" });
+    if (q.user.role === "customer") {
+      const scope = await customerScope(q.user);
+      if (!scope.matches(inv)) return s.status(403).json({ error: "You can only pay your own invoices" });
+    }
     let amount = +q.body.amount;
     if (amount <= 0 || amount > +(inv.outstandingAmount ?? inv.total)) return s.status(400).json({ error: "Amount exceeds balance" });
     inv.paidAmount = (inv.paidAmount || 0) + amount;
