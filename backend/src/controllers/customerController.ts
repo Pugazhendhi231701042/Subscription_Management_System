@@ -138,6 +138,113 @@ export async function getPortalData(req: AuthenticatedRequest, res: Response) {
   }
 }
 
+export async function updatePortalProfile(req: AuthenticatedRequest, res: Response) {
+  try {
+    if (!req.user?.customerId) {
+      return res.status(400).json({ success: false, error: 'Customer profile not identified.' });
+    }
+
+    const { contactName, phone, street, city, country } = req.body;
+
+    const updated = await prisma.customer.update({
+      where: { id: req.user.customerId },
+      data: {
+        contactName: contactName ? contactName.trim() : undefined,
+        phone: phone || null,
+        street: street || null,
+        city: city || null,
+        country: country || 'India'
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Your company profile was successfully updated.',
+      profile: updated
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: 'Failed to update profile.' });
+  }
+}
+
+export async function portalPayInvoice(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { id } = req.params; // invoice id
+    const { paymentMethod = 'UPI', referenceNumber } = req.body;
+
+    if (!req.user?.customerId) {
+      return res.status(403).json({ success: false, error: 'Only customers can make portal payments.' });
+    }
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { customer: true }
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ success: false, error: 'Invoice not found.' });
+    }
+
+    if (invoice.customerId !== req.user.customerId) {
+      return res.status(403).json({ success: false, error: 'Access denied: You can only pay your own invoices.' });
+    }
+
+    if (invoice.status === 'PAID') {
+      return res.status(400).json({ success: false, error: 'This invoice has already been fully paid.' });
+    }
+
+    const payCount = await prisma.payment.count();
+    const year = new Date().getFullYear();
+    const paymentNumber = `PAY-${year}-${String(payCount + 1).padStart(5, '0')}`;
+    const amount = invoice.amountDue;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.create({
+        data: {
+          paymentNumber,
+          invoiceId: invoice.id,
+          customerId: invoice.customerId,
+          amount,
+          paymentMethod: paymentMethod.toUpperCase(),
+          paymentDate: new Date(),
+          referenceNumber: referenceNumber || `PORTAL/UPI/${Date.now().toString().slice(-6)}`,
+          notes: 'Instant customer self-service settlement via Portal',
+          recordedByUserId: req.user?.id || null
+        }
+      });
+
+      const updatedInvoice = await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          amountPaid: invoice.totalAmount,
+          amountDue: 0.0,
+          status: 'PAID'
+        }
+      });
+
+      return { payment, updatedInvoice };
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'PAYMENT',
+        entityType: 'INVOICE',
+        entityId: invoice.id,
+        details: `Customer ${invoice.customer.companyName} settled invoice ${invoice.invoiceNumber} (₹${amount.toFixed(2)}) via Portal.`
+      }
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Payment of ₹${amount.toLocaleString('en-IN')} confirmed! Invoice ${invoice.invoiceNumber} is now fully PAID.`,
+      payment: result.payment
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: 'Payment processing failed.' });
+  }
+}
+
 export async function createCustomer(req: AuthenticatedRequest, res: Response) {
   try {
     const { companyName, contactName, email, phone, street, city, country, paymentTerms } = req.body;
