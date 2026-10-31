@@ -123,38 +123,41 @@ const fmt = (n: number | string | undefined | null) => new Intl.NumberFormat("en
 
 const initial: Record<string, any[]> = { staff: [], plans: [], quotations: [], payments: [], discounts: [], taxes: [], customers: [], subscriptions: [], invoices: [], products: [], chart: [] };
 
+// Minimized sidebar navigation: 9 clean operational modules
 const links = [
   ["Overview", IconDashboard],
-  ["User Guide", IconBook],
-  ["Customers", IconUsers],
-  ["Products", IconPackage],
-  ["Plans", IconPackage],
+  ["Products & Plans", IconPackage],
   ["Quotations", IconFileText],
   ["Subscriptions", IconRepeat],
-  ["Invoices", IconFileText],
-  ["Payments", IconCreditCard],
-  ["Discounts", IconActivity],
-  ["Taxes", IconActivity],
+  ["Invoices & Payments", IconCreditCard],
+  ["User Management", IconUsers],
+  ["Configuration", IconSettings],
   ["Reports", IconActivity],
-  ["Staff", IconUsers],
-  ["Profile", IconUsers]
+  ["User Guide", IconBook]
 ];
 
 const pageDescriptions: Record<string, string> = {
   Overview: "Live operational metrics of your active subscriptions, monthly recurring revenue, and cash collections.",
-  "User Guide": "Complete step-by-step walkthrough, testing instructions, and role reference for Brightloop.",
-  Customers: "Client accounts and companies using Brightloop Software.",
-  Staff: "Internal employees. Only the master admin can manage staff accounts.",
-  Products: "Catalog of software products, add-on modules, and edition variants.",
-  Plans: "Pricing intervals (Monthly, Yearly, Weekly, Daily) and minimum seat requirements.",
+  "Products & Plans": "Catalog of software products, add-on modules, and recurring billing plans.",
   Quotations: "Official proposals sent to clients. When accepted, convert them directly into active subscriptions.",
   Subscriptions: "Active recurring software contracts. Automatically bills customer accounts on their renewal date.",
+  "Invoices & Payments": "Recurring bills generated from active subscriptions and verified cash collections ledger.",
+  "User Management": "Client accounts with private customer portals and internal staff members.",
+  Configuration: "Automated discount tiers, GST tax calculation rules, and test data management.",
+  Reports: "Financial revenue reporting, collected cash, and outstanding balances.",
+  "User Guide": "Complete step-by-step walkthrough, testing instructions, and role reference for Brightloop."
+};
+
+const subtabDescriptions: Record<string, string> = {
+  Products: "Catalog of software products, software editions, and add-on modules.",
+  Plans: "Pricing intervals (Monthly, Yearly, Weekly, Daily) and minimum seat limits.",
   Invoices: "Recurring invoices generated from active subscriptions. Shows paid, pending, and overdue balances.",
   Payments: "Payment ledger tracking every rupee received via UPI, Card, Bank Transfer, or Cash.",
+  Customers: "Client accounts. Each client gets their own private portal where they only see their own subscriptions and invoices.",
+  Staff: "Internal employees. Only the master admin can manage staff accounts.",
   Discounts: "Automated discount rules applied when customers meet seat count or spending thresholds.",
   Taxes: "Automated GST and sales tax calculation rules applied to quotations and billing cycles.",
-  Reports: "Financial revenue reporting, collected cash, and outstanding balances.",
-  Profile: "Manage your contact information and company details."
+  "System Reset": "Wipe all transaction records (subscriptions, invoices, quotations, payments) for clean testing."
 };
 
 const pageGuides: Record<string, { title: string; desc: string; actionLabel?: string; actionTarget?: string }> = {
@@ -166,15 +169,15 @@ const pageGuides: Record<string, { title: string; desc: string; actionLabel?: st
   },
   Subscriptions: {
     title: "Subscriptions - Active Software Contracts",
-    desc: "Active subscriptions renew on their Next Invoice Date. Click 'Change Plan' to upgrade/downgrade seats or 'Simulate Billing Run' to invoice now.",
+    desc: "Active subscriptions renew on their Next Invoice Date. Click 'Change Plan' to upgrade/downgrade seats or 'Simulate Monthly Billing Run' on Overview to invoice now.",
     actionLabel: "View Invoices",
-    actionTarget: "Invoices"
+    actionTarget: "Invoices & Payments"
   },
   Invoices: {
     title: "Invoices - Recurring Bills",
     desc: "Generated automatically from active subscriptions. Click 'Pay Now' to settle an invoice, or 'Send Invoice' to email it to the client.",
-    actionLabel: "View Payment Ledger",
-    actionTarget: "Payments"
+    actionLabel: "View Cash Ledger",
+    actionTarget: "Invoices & Payments"
   },
   Payments: {
     title: "Payments - Cash Ledger",
@@ -186,13 +189,19 @@ const pageGuides: Record<string, { title: string; desc: string; actionLabel?: st
     title: "Customers - Client Directory",
     desc: "Client accounts. Each client gets their own private portal where they only see their own subscriptions and invoices.",
     actionLabel: "View Products",
-    actionTarget: "Products"
+    actionTarget: "Products & Plans"
+  },
+  Staff: {
+    title: "Staff Members - Employee Directory",
+    desc: "Internal employees who can create quotations and manage customer subscriptions. Only the Master Admin can manage staff.",
+    actionLabel: "View Customers",
+    actionTarget: "User Management"
   },
   Products: {
     title: "Products - Software Catalog",
     desc: "Catalog of software modules and add-ons (such as Odoo ERP Sync) offered to customers with base pricing.",
     actionLabel: "View Plans",
-    actionTarget: "Plans"
+    actionTarget: "Products & Plans"
   },
   Plans: {
     title: "Plans - Billing Cadence",
@@ -204,11 +213,17 @@ const pageGuides: Record<string, { title: string; desc: string; actionLabel?: st
     title: "Discounts - Volume Rules",
     desc: "Automated discount tiers (e.g. 10% off for 10+ seats). Applied automatically to quotation line items.",
     actionLabel: "View Taxes",
-    actionTarget: "Taxes"
+    actionTarget: "Configuration"
   },
   Taxes: {
     title: "Taxes - GST & VAT Rules",
     desc: "Automated GST or sales tax rules (e.g. GST 18%). Automatically computed on subtotal after discounts.",
+    actionLabel: "Back to Overview",
+    actionTarget: "Overview"
+  },
+  "System Reset": {
+    title: "System Reset - Data Wipe Utility",
+    desc: "Clear all transactional data (subscriptions, recurring invoices, quotations, and payments) to start fresh tests.",
     actionLabel: "Back to Overview",
     actionTarget: "Overview"
   }
@@ -217,6 +232,7 @@ const pageGuides: Record<string, { title: string; desc: string; actionLabel?: st
 export function App() {
   const [d, D] = useState<Record<string, any[]>>(initial);
   const [page, P] = useState("Overview");
+  const [subTab, setSubTab] = useState<string>("default");
   const [modal, M] = useState("");
   const [toast, T] = useState("");
   const [q, Q] = useState("");
@@ -226,6 +242,7 @@ export function App() {
   const [summary, Summary] = useState<any>(null);
   const [night, N] = useState(() => localStorage.getItem("brightloop_theme") === "night");
   const [showGuide, setShowGuide] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [payingInvoice, setPayingInvoice] = useState<any>(null);
   const [user, U] = useState<any>(() => {
     try {
@@ -236,6 +253,44 @@ export function App() {
     }
   });
 
+  const getSubtabs = (p: string) => {
+    if (p === "Products & Plans") return ["Products", "Plans"];
+    if (p === "Invoices & Payments") return ["Invoices", "Payments"];
+    if (p === "User Management") return user?.role === "admin" ? ["Customers", "Staff"] : ["Customers"];
+    if (p === "Configuration") return ["Discounts", "Taxes", "System Reset"];
+    return [];
+  };
+
+  const getActiveKey = () => {
+    if (page === "Products & Plans") return subTab === "Plans" ? "plans" : "products";
+    if (page === "Invoices & Payments") return subTab === "Payments" ? "payments" : "invoices";
+    if (page === "User Management") return subTab === "Staff" ? "staff" : "customers";
+    if (page === "Configuration") {
+      if (subTab === "Taxes") return "taxes";
+      if (subTab === "System Reset") return "reset";
+      return "discounts";
+    }
+    if (page === "Quotations") return "quotations";
+    if (page === "Subscriptions") return "subscriptions";
+    if (page === "Reports") return "subscriptions";
+    if (page === "User Guide") return "guide";
+    return "subscriptions";
+  };
+
+  const k = getActiveKey();
+
+  const changePage = (newPage: string, targetSub?: string) => {
+    P(newPage);
+    F("All");
+    Q("");
+    const available = getSubtabs(newPage);
+    if (targetSub && available.includes(targetSub)) {
+      setSubTab(targetSub);
+    } else {
+      setSubTab(available[0] || "default");
+    }
+  };
+
   React.useEffect(() => {
     const token = localStorage.getItem("brightloop_token") || sessionStorage.getItem("brightloop_token");
     if (!token) return;
@@ -244,7 +299,7 @@ export function App() {
       if (e.response?.status === 401) logout();
       else notice(e.response?.data?.error || "Could not verify your session");
     });
-    api.get("/dashboard").then((r) => Summary(r.data.data)).catch((e) => notice(e.response?.data?.error || "Dashboard could not load"));
+    refreshSummary();
     const keys = [
       "customers",
       "subscriptions",
@@ -273,18 +328,16 @@ export function App() {
     });
   }, [user]);
 
-  const pageMap: Record<string, string> = { Overview: "subscriptions", "User Guide": "guide", Reports: "subscriptions", Customers: "customers", Staff: "staff", Products: "products", Plans: "plans", Quotations: "quotations", Subscriptions: "subscriptions", Invoices: "invoices", Payments: "payments", Discounts: "discounts", Taxes: "taxes", Profile: "profile" };
-
   React.useEffect(() => {
-    if (!user || !pageMap[page] || ["Overview", "Reports", "Profile", "User Guide"].includes(page)) return;
-    const key = pageMap[page] === "staff" ? "users" : pageMap[page];
+    if (!user || ["Overview", "Reports", "User Guide"].includes(page) || k === "reset" || k === "guide") return;
+    const key = k === "staff" ? "users" : k;
     const timer = setTimeout(() => api.get("/" + key, { params: { page: 1, limit: 100, search: q, status: filter === "All" ? "" : filter } }).then((r) => {
       const target = key === "users" ? "staff" : key;
       D((old) => ({ ...old, [target]: r.data.data }));
       PageInfo((old) => ({ ...old, [target]: r.data }));
     }).catch((e) => notice(e.response?.data?.error || `${page} could not load`)), 250);
     return () => clearTimeout(timer);
-  }, [user, page, q, filter]);
+  }, [user, page, subTab, q, filter, k]);
 
   const refreshSummary = async () => {
     try { Summary((await api.get("/dashboard")).data.data); }
@@ -318,10 +371,22 @@ export function App() {
       localStorage.setItem("brightloop_user", JSON.stringify(data.user));
       api.defaults.headers.common.Authorization = "Bearer " + data.token;
       U(data.user);
-      P("Overview");
+      changePage("Overview");
       notice(`Switched view to ${targetRole.toUpperCase()}: ${data.user.name}`);
     } catch {
       notice("Could not switch role. Start the API server.");
+    }
+  }
+
+  async function clearAllTransactionData() {
+    if (!confirm("Are you sure you want to clear all transaction records (subscriptions, invoices, quotations, payments)? This cannot be undone.")) return;
+    try {
+      await api.post("/admin/clear-data", {});
+      D((old) => ({ ...old, subscriptions: [], invoices: [], quotations: [], payments: [] }));
+      refreshSummary();
+      notice("All transaction data cleared successfully. System is now fresh for testing.");
+    } catch (e: any) {
+      notice(e.response?.data?.error || "Failed to clear transaction data");
     }
   }
 
@@ -350,7 +415,20 @@ export function App() {
       }
       return;
     }
-    const keyMap: Record<string, string> = { "New work item": "workItems", "New customer": "customers", "New product": "products", "New plan": "plans", "New quotation": "quotations", "New quotation template": "quotationTemplates", "New subscription": "subscriptions", "New invoice": "invoices", "New payment": "payments", "New discount": "discounts", "New tax": "taxes", "New staff": "users" };
+    const keyMap: Record<string, string> = {
+      "New work item": "workItems",
+      "New customer": "customers",
+      "New product": "products",
+      "New plan": "plans",
+      "New quotation": "quotations",
+      "New quotation template": "quotationTemplates",
+      "New subscription": "subscriptions",
+      "New invoice": "invoices",
+      "New payment": "payments",
+      "New discount": "discounts",
+      "New tax": "taxes",
+      "New staff": "users"
+    };
     const k2 = keyMap[modal] || "subscriptions";
     let item = { ...v, number: "BL-" + Date.now().toString().slice(-5), status: "Active" };
     try {
@@ -362,7 +440,7 @@ export function App() {
     D((x) => ({ ...x, [k2 === "users" ? "staff" : k2]: [item, ...x[k2 === "users" ? "staff" : k2]] }));
     M("");
     refreshSummary();
-    notice(k2 === "users" ? "Staff invitation created." : k2 === "workItems" ? "Work assigned" : "Record created");
+    notice(k2 === "users" ? "Staff account created with password." : k2 === "customers" ? "Customer account & portal created." : "Record created");
   }
 
   async function convertQuote(item: any) {
@@ -381,10 +459,9 @@ export function App() {
 
   async function updateStatus(item: any, status: string) {
     try {
-      const key = page === "Invoices" ? "invoices" : page === "Staff" ? "staff" : page === "Work" ? "workItems" : page === "Quotations" ? "quotations" : "subscriptions";
-      const endpoint = key === "staff" ? "/users/" + (item._id || item.id) : key === "workItems" ? "/workItems/" + (item._id || item.id) : key === "quotations" ? "/quotations/" + (item._id || item.id) : key === "invoices" ? "/invoices/" + (item._id || item.id) + "/status" : "/subscriptions/" + (item._id || item.id) + "/status";
-      const updated = (await (["staff", "workItems", "quotations"].includes(key) ? api.patch(endpoint, { status }) : api.post(endpoint, { status }))).data.data;
-      D((x) => ({ ...x, [key]: x[key].map((row) => (row._id || row.id) === (item._id || item.id) ? updated : row) }));
+      const endpoint = k === "staff" ? "/users/" + (item._id || item.id) : k === "quotations" ? "/quotations/" + (item._id || item.id) : k === "invoices" ? "/invoices/" + (item._id || item.id) + "/status" : "/subscriptions/" + (item._id || item.id) + "/status";
+      const updated = (await (["staff", "quotations"].includes(k) ? api.patch(endpoint, { status }) : api.post(endpoint, { status }))).data.data;
+      D((x) => ({ ...x, [k]: x[k].map((row) => (row._id || row.id) === (item._id || item.id) ? updated : row) }));
       refreshSummary();
       notice("Status updated to " + status);
     } catch (e: any) { notice(e.response?.data?.error || "Could not update status"); }
@@ -413,8 +490,7 @@ export function App() {
     }
   }
 
-  let k = pageMap[page] || "subscriptions";
-  let rows = d[k] || d.subscriptions;
+  let rows = d[k] || [];
 
   async function loadMore() {
     const key = k === "staff" ? "users" : k, info = pageInfo[k];
@@ -491,7 +567,32 @@ export function App() {
 
   if (!user) return <Auth onLogin={(u: any) => U(u)} />;
 
-  const visibleLinks = links.filter(([n]) => user.role === "customer" ? ["Overview", "User Guide", "Products", "Plans", "Subscriptions", "Invoices", "Payments", "Profile"].includes(n as string) : user.role === "staff" ? ["Overview", "User Guide", "Customers", "Quotations", "Subscriptions", "Invoices", "Payments", "Reports", "Profile"].includes(n as string) : true);
+  const visibleLinks = links.filter(([n]) => {
+    if (user.role === "customer") {
+      return ["Overview", "Products & Plans", "Subscriptions", "Invoices & Payments", "User Guide"].includes(n as string);
+    }
+    if (user.role === "staff") {
+      return ["Overview", "Products & Plans", "Quotations", "Subscriptions", "Invoices & Payments", "User Management", "Reports", "User Guide"].includes(n as string);
+    }
+    return true;
+  });
+
+  const currentSubtabs = getSubtabs(page);
+
+  // Helper for primary action modal
+  const openNewModal = () => {
+    if (page === "Products & Plans") M(subTab === "Plans" ? "New plan" : "New product");
+    else if (page === "Invoices & Payments") M(subTab === "Payments" ? "New payment" : "New invoice");
+    else if (page === "User Management") M(subTab === "Staff" ? "New staff" : "New customer");
+    else if (page === "Configuration") {
+      if (subTab === "Taxes") M("New tax");
+      else if (subTab === "Discounts") M("New discount");
+    }
+    else if (page === "Quotations") M("New quotation");
+    else if (page === "Subscriptions" || page === "Overview") M("New subscription");
+  };
+
+  const currentGuide = pageGuides[subTab] || pageGuides[page];
 
   return (
     <div className={night ? "app night" : "app"}>
@@ -509,23 +610,19 @@ export function App() {
         </div>
         <label>WORKSPACE</label>
         {visibleLinks.map(([n, I]: any) => (
-          <button key={n} className={page === n ? "selected" : ""} onClick={() => { P(n); F("All"); Q(""); }}>
+          <button key={n} className={page === n ? "selected" : ""} onClick={() => changePage(n)}>
             <I size={17} />
             {n}
           </button>
         ))}
         <div className="sidefoot">
-          <button onClick={() => P("Profile")}>
-            <IconSettings size={17} />
-            Settings / Profile
-          </button>
-          <div className="account">
+          <div className="account account-clickable" onClick={() => setShowProfile(true)} title="Click to view and edit profile">
             <i>{(user.name || user.email || "U").slice(0, 1).toUpperCase()}</i>
             <span>
               <b>{user.name || user.email}</b>
-              <small>{user.role === 'admin' ? 'Master Admin' : user.role === 'staff' ? 'Staff Sales' : 'Customer Account'}</small>
+              <small>{user.role === 'admin' ? 'Master Admin' : user.role === 'staff' ? 'Staff Member' : 'Customer Account'}</small>
             </span>
-            <button onClick={logout}>Log out</button>
+            <button onClick={(e) => { e.stopPropagation(); logout(); }}>Log out</button>
           </div>
         </div>
       </aside>
@@ -534,13 +631,14 @@ export function App() {
         <header>
           <span>
             Workspace / <b>{page}</b>
+            {currentSubtabs.length > 0 && subTab !== "default" && <span> / <b style={{ color: "#7455e8" }}>{subTab}</b></span>}
             <span className="role-pill" style={{ marginLeft: "14px" }}>
               {user.role === "admin" ? "Admin Mode" : user.role === "staff" ? "Staff Mode" : "Customer Portal"}
             </span>
           </span>
 
           <nav className="mobile-nav">
-            <select aria-label="Choose a page" value={page} onChange={(e) => { P(e.target.value); F("All"); Q(""); }}>
+            <select aria-label="Choose a page" value={page} onChange={(e) => changePage(e.target.value)}>
               {visibleLinks.map(([name]) => <option key={name as string} value={name as string}>{name as string}</option>)}
             </select>
           </nav>
@@ -573,7 +671,9 @@ export function App() {
             >
               {night ? <IconSun size={17} /> : <IconMoon size={17} />}
             </button>
-            <i>{(user.name || "U").slice(0, 1).toUpperCase()}</i>
+            <button className="user-avatar-btn" onClick={() => setShowProfile(true)} title="View profile & account details">
+              {(user.name || user.email || "U").slice(0, 1).toUpperCase()}
+            </button>
             <button className="logouttop" onClick={logout}>Log out</button>
           </div>
         </header>
@@ -620,53 +720,43 @@ export function App() {
             <div>
               <small>{page === "Overview" ? new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase() : "BRIGHTLOOP ERP"}</small>
               <h1>{page === "Overview" ? (user.role === "customer" ? "My Customer Portal" : "Good morning, " + (user.name || "there")) : page}</h1>
-              <p>{pageDescriptions[page] || "Manage your subscription operations."}</p>
+              <p>{subtabDescriptions[subTab] || pageDescriptions[page] || "Manage your subscription operations."}</p>
             </div>
-            {user.role !== "customer" && page !== "User Guide" && (
-              <button
-                className="primary"
-                onClick={() => M(
-                  page === "Overview" || page === "Subscriptions" ? "New subscription" :
-                  page === "Customers" ? "New customer" :
-                  page === "Products" ? "New product" :
-                  page === "Plans" ? "New plan" :
-                  page === "Quotations" ? "New quotation" :
-                  page === "Payments" ? "New payment" :
-                  page === "Discounts" ? "New discount" :
-                  page === "Taxes" ? "New tax" :
-                  page === "Staff" ? "New staff" :
-                  "New invoice"
-                )}
-              >
+            {user.role !== "customer" && page !== "User Guide" && page !== "Reports" && subTab !== "System Reset" && (
+              <button className="primary" onClick={openNewModal}>
                 <IconPlus size={16} />
-                {page === "Overview" ? "New subscription" : "Create " + page.replace(/s$/, "").toLowerCase()}
+                {page === "Products & Plans" ? (subTab === "Plans" ? "New plan" : "New product") :
+                 page === "Invoices & Payments" ? (subTab === "Payments" ? "Record payment" : "New invoice") :
+                 page === "User Management" ? (subTab === "Staff" ? "New staff member" : "New customer") :
+                 page === "Configuration" ? (subTab === "Taxes" ? "New tax rule" : "New discount tier") :
+                 page === "Quotations" ? "New quotation" : "New subscription"}
               </button>
             )}
           </div>
 
           {page === "Overview" && user.role !== "customer" && (
             <div className="flow-banner">
-              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Products")}>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => changePage("Products & Plans", "Products")}>
                 <span className="flow-num">1</span>
                 <div><b>1. Products & Plans</b><small>What Brightloop sells</small></div>
               </div>
               <span className="flow-arrow">-&gt;</span>
-              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Quotations")}>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => changePage("Quotations")}>
                 <span className="flow-num">2</span>
                 <div><b>2. Quotation</b><small>Offer sent to lead</small></div>
               </div>
               <span className="flow-arrow">-&gt;</span>
-              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Subscriptions")}>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => changePage("Subscriptions")}>
                 <span className="flow-num">3</span>
                 <div><b>3. Subscription</b><small>Active recurring plan</small></div>
               </div>
               <span className="flow-arrow">-&gt;</span>
-              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Invoices")}>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => changePage("Invoices & Payments", "Invoices")}>
                 <span className="flow-num">4</span>
                 <div><b>4. Auto Invoicing</b><small>Monthly bill generated</small></div>
               </div>
               <span className="flow-arrow">-&gt;</span>
-              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => P("Payments")}>
+              <div className="flow-step" style={{ cursor: "pointer" }} onClick={() => changePage("Invoices & Payments", "Payments")}>
                 <span className="flow-num">5</span>
                 <div><b>5. Payment</b><small>Reconciled & paid</small></div>
               </div>
@@ -677,26 +767,24 @@ export function App() {
             <div className="demo-flow-strip">
               <span>Interactive 60-Second Demo Flow:</span>
               <div className="demo-flow-buttons">
-                <button onClick={() => P("Quotations")}>1. View Quotations</button>
+                <button onClick={() => changePage("Quotations")}>1. View Quotations</button>
                 <button onClick={() => {
                   const acceptedQuote = d.quotations.find((q: any) => q.status === "Accepted");
                   if (acceptedQuote) {
                     convertQuote(acceptedQuote);
                   } else {
-                    P("Quotations");
+                    changePage("Quotations");
                     notice("Look for an Accepted quotation to convert, or click Mark Accepted on a Draft quote");
                   }
                 }}>2. Convert Quote to Subscription</button>
                 <button onClick={runBilling}>3. Run Monthly Billing Run</button>
-                <button onClick={() => P("Invoices")}>4. Settle Invoice & Update Revenue</button>
+                <button onClick={() => changePage("Invoices & Payments", "Invoices")}>4. Settle Invoice & Update Revenue</button>
               </div>
             </div>
           )}
 
-          {page === "Profile" ? (
-            <ProfilePanel user={user} notify={notice} />
-          ) : page === "User Guide" ? (
-            <GuidePanel setPage={P} quickSwitchRole={quickSwitchRole} user={user} runBilling={runBilling} convertQuote={convertQuote} quotations={d.quotations} invoices={d.invoices} notice={notice} />
+          {page === "User Guide" ? (
+            <GuidePanel setPage={changePage} quickSwitchRole={quickSwitchRole} user={user} runBilling={runBilling} convertQuote={convertQuote} quotations={d.quotations} invoices={d.invoices} notice={notice} />
           ) : page === "Overview" || page === "Reports" ? (
             <>
               <div className="metrics">
@@ -770,7 +858,7 @@ export function App() {
                       <b>Recent subscriptions</b>
                       <small>Latest accounts created and renewed</small>
                     </div>
-                    <a onClick={() => P("Subscriptions")}>View all subscriptions</a>
+                    <a onClick={() => changePage("Subscriptions")}>View all subscriptions</a>
                   </div>
                   <Table rows={d.subscriptions} />
                 </section>
@@ -793,82 +881,146 @@ export function App() {
             </>
           ) : (
             <section className="panel listing">
-              {pageGuides[page] && (
+              {/* Sub-tab navigation bar for grouped operational pages */}
+              {currentSubtabs.length > 0 && (
+                <div className="subtab-bar">
+                  {currentSubtabs.map((tab) => (
+                    <button
+                      key={tab}
+                      className={`subtab-btn ${subTab === tab ? "active" : ""}`}
+                      onClick={() => { setSubTab(tab); F("All"); Q(""); }}
+                    >
+                      {tab}
+                      <span className="subtab-count">
+                        {tab === "Products" ? d.products.length :
+                         tab === "Plans" ? d.plans.length :
+                         tab === "Invoices" ? d.invoices.length :
+                         tab === "Payments" ? d.payments.length :
+                         tab === "Customers" ? d.customers.length :
+                         tab === "Staff" ? d.staff.length :
+                         tab === "Discounts" ? d.discounts.length :
+                         tab === "Taxes" ? d.taxes.length : "0"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Contextual Educational Guides */}
+              {currentGuide && (
                 <div className="page-guide">
                   <div className="page-guide-content">
-                    <b>{pageGuides[page].title}</b>
-                    <p>{pageGuides[page].desc}</p>
+                    <b>{currentGuide.title}</b>
+                    <p>{currentGuide.desc}</p>
                   </div>
-                  {pageGuides[page].actionTarget && (
+                  {currentGuide.actionTarget && (
                     <div className="page-guide-action">
-                      <button onClick={() => P(pageGuides[page].actionTarget!)}>{pageGuides[page].actionLabel}</button>
+                      <button onClick={() => changePage(currentGuide.actionTarget!)}>{currentGuide.actionLabel}</button>
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="tabs">
-                {(
-                  page === "Invoices" ? ["All", "Draft", "Confirmed", "Sent", "Partial", "Paid", "Overdue", "Cancelled"] :
-                  page === "Subscriptions" ? ["All", "Draft", "Quotation", "Confirmed", "Active", "Paused", "Closed"] :
-                  page === "Quotations" ? ["All", "Draft", "Sent", "Accepted", "Rejected", "Expired", "Converted"] :
-                  ["All", "Active", "Past due", "Closed"]
-                ).map((x) => (
-                  <button key={x} className={filter === x ? "on" : ""} onClick={() => F(x)}>{x}</button>
-                ))}
-                <button
-                  className="export"
-                  onClick={() => {
-                    const csv = [Object.keys(filtered[0] || {}).join(","), ...filtered.map((r: any) => Object.values(r).map((v) => '"' + String(v ?? "").replaceAll('"', '""') + '"').join(","))].join("\n");
-                    const a = document.createElement("a");
-                    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-                    a.download = page.toLowerCase() + ".csv";
-                    a.click();
-                    URL.revokeObjectURL(a.href);
-                  }}
-                >
-                  Export CSV
-                </button>
-              </div>
-
-              {filtered.length === 0 ? (
-                <div className="table-empty">
-                  <p>No records found for "{filter}".</p>
-                  {user.role !== "customer" && <small>Use the button above to add a new record to this section.</small>}
+              {/* Explanatory banner for User Management */}
+              {page === "User Management" && subTab === "Customers" && (
+                <div className="customer-notice">
+                  <div>
+                    <b>How Customers Are Created & Access Brightloop:</b>
+                    <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#5a6275" }}>
+                      Adding a customer creates their client record and immediately provisions their private Customer Portal account with login credentials: their email + default password <code>Brightloop@2026</code>. Customers can also self-register on the sign-in screen.
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <Table
-                  rows={filtered}
-                  onDelete={user.role === "customer" ? null : (row: any) => remove(k, row)}
-                  onConvert={k === "quotations" ? (row: any) => convertQuote(row) : null}
-                  onStatusChange={(k === "staff" && user.role === "admin") || k === "subscriptions" || k === "quotations" || (k === "invoices" && user.role !== "customer") ? updateStatus : null}
-                  onChangePlan={user.role === "customer" && k === "subscriptions" ? openPlanChange : null}
-                  onSend={k === "invoices" && user.role !== "customer" ? sendInvoice : null}
-                  onPrint={k === "invoices" ? printInvoice : null}
-                  onPay={k === "invoices" ? (row: any) => setPayingInvoice(row) : null}
-                  onEdit={user.role === "customer" ? null : (row: any) => {
-                    E({ key: k, item: row });
-                    M(
-                      k === "staff" ? "New staff" :
-                      k === "customers" ? "New customer" :
-                      k === "products" ? "New product" :
-                      k === "plans" ? "New plan" :
-                      k === "quotations" ? "New quotation" :
-                      k === "subscriptions" ? "New subscription" :
-                      k === "invoices" ? "New invoice" :
-                      k === "payments" ? "New payment" :
-                      k === "discounts" ? "New discount" :
-                      "New tax"
-                    );
-                  }}
-                />
               )}
 
-              {pageInfo[k]?.page < pageInfo[k]?.totalPages && (
-                <div className="pagination">
-                  <span>Showing {rows.length} of {pageInfo[k]?.total} records</span>
-                  <button className="secondary" onClick={loadMore}>Load more</button>
+              {page === "User Management" && subTab === "Staff" && (
+                <div className="customer-notice">
+                  <div>
+                    <b>How Staff Accounts Are Created:</b>
+                    <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#5a6275" }}>
+                      Staff creation is strictly controlled by the Master Admin. Enter the staff member's name, email, department, and define their initial login password. Staff can sign in immediately to prepare quotations, convert sales proposals into subscriptions, and handle recurring invoices.
+                    </p>
+                  </div>
                 </div>
+              )}
+
+              {/* System Reset Tab inside Configuration */}
+              {page === "Configuration" && subTab === "System Reset" ? (
+                <div className="danger-card">
+                  <h4>Clear All Transaction Data</h4>
+                  <p>
+                    Wipe all active and past subscriptions, recurring invoices, sales quotations, and payment records to test clean starting flows from scratch. Client customer profiles, products, plans, taxes, discounts, and staff accounts will remain safe.
+                  </p>
+                  <button className="danger-btn" onClick={clearAllTransactionData}>
+                    Wipe All Transaction Records
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="tabs">
+                    {(
+                      k === "invoices" ? ["All", "Draft", "Confirmed", "Sent", "Partial", "Paid", "Overdue", "Cancelled"] :
+                      k === "subscriptions" ? ["All", "Draft", "Quotation", "Confirmed", "Active", "Paused", "Closed"] :
+                      k === "quotations" ? ["All", "Draft", "Sent", "Accepted", "Rejected", "Expired", "Converted"] :
+                      ["All", "Active", "Past due", "Closed"]
+                    ).map((x) => (
+                      <button key={x} className={filter === x ? "on" : ""} onClick={() => F(x)}>{x}</button>
+                    ))}
+                    <button
+                      className="export"
+                      onClick={() => {
+                        const csv = [Object.keys(filtered[0] || {}).join(","), ...filtered.map((r: any) => Object.values(r).map((v) => '"' + String(v ?? "").replaceAll('"', '""') + '"').join(","))].join("\n");
+                        const a = document.createElement("a");
+                        a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+                        a.download = (subTab !== "default" ? subTab.toLowerCase() : page.toLowerCase()) + ".csv";
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                      }}
+                    >
+                      Export CSV
+                    </button>
+                  </div>
+
+                  {filtered.length === 0 ? (
+                    <div className="table-empty">
+                      <p>No records found for "{filter}".</p>
+                      {user.role !== "customer" && <small>Use the button above to add a new record to this section.</small>}
+                    </div>
+                  ) : (
+                    <Table
+                      rows={filtered}
+                      onDelete={user.role === "customer" ? null : (row: any) => remove(k, row)}
+                      onConvert={k === "quotations" ? (row: any) => convertQuote(row) : null}
+                      onStatusChange={(k === "staff" && user.role === "admin") || k === "subscriptions" || k === "quotations" || (k === "invoices" && user.role !== "customer") ? updateStatus : null}
+                      onChangePlan={user.role === "customer" && k === "subscriptions" ? openPlanChange : null}
+                      onSend={k === "invoices" && user.role !== "customer" ? sendInvoice : null}
+                      onPrint={k === "invoices" ? printInvoice : null}
+                      onPay={k === "invoices" ? (row: any) => setPayingInvoice(row) : null}
+                      onEdit={user.role === "customer" ? null : (row: any) => {
+                        E({ key: k, item: row });
+                        M(
+                          k === "staff" ? "New staff" :
+                          k === "customers" ? "New customer" :
+                          k === "products" ? "New product" :
+                          k === "plans" ? "New plan" :
+                          k === "quotations" ? "New quotation" :
+                          k === "subscriptions" ? "New subscription" :
+                          k === "invoices" ? "New invoice" :
+                          k === "payments" ? "New payment" :
+                          k === "discounts" ? "New discount" :
+                          "New tax"
+                        );
+                      }}
+                    />
+                  )}
+
+                  {pageInfo[k]?.page < pageInfo[k]?.totalPages && (
+                    <div className="pagination">
+                      <span>Showing {rows.length} of {pageInfo[k]?.total} records</span>
+                      <button className="secondary" onClick={loadMore}>Load more</button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}
@@ -891,6 +1043,23 @@ export function App() {
           templates={d.quotationTemplates}
           staff={d.staff}
         />
+      )}
+
+      {showProfile && (
+        <div className="backdrop" onClick={() => setShowProfile(false)}>
+          <div className="guide-modal-box" style={{ width: "min(560px, 94vw)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <div>
+                <h2 style={{ margin: 0 }}>My Profile & Settings</h2>
+                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#6b7282" }}>
+                  {user.role === "admin" ? "Master Admin Account" : user.role === "staff" ? "Staff Member Account" : "Customer Portal Account"}
+                </p>
+              </div>
+              <button className="secondary" style={{ padding: "4px 8px", fontSize: "11px" }} onClick={() => setShowProfile(false)}>Close</button>
+            </div>
+            <ProfilePanel user={user} notify={notice} onClose={() => setShowProfile(false)} />
+          </div>
+        </div>
       )}
 
       {showGuide && (
@@ -969,7 +1138,7 @@ export function App() {
                 className="primary"
                 onClick={() => {
                   setShowGuide(false);
-                  P("Quotations");
+                  changePage("Quotations");
                   notice("Welcome to Quotations! Review Acme Corp's quote or create a new one.");
                 }}
               >
@@ -1048,94 +1217,75 @@ function GuidePanel({ setPage, quickSwitchRole, user, runBilling, convertQuote, 
               setPage("Quotations");
               notice("Step 1: Check Acme Corp's quotation. If Draft, click 'Mark Accepted'. If Accepted, click 'Convert to Subscription'.");
             }}>
-              1. View & Accept Quotation
+              1. View Quotations
             </button>
             <button onClick={() => {
-              const accepted = quotations.find((q: any) => q.status === "Accepted");
-              if (accepted) {
-                convertQuote(accepted);
+              const acceptedQuote = quotations.find((q: any) => q.status === "Accepted");
+              if (acceptedQuote) {
+                convertQuote(acceptedQuote);
               } else {
                 setPage("Quotations");
-                notice("Find an Accepted quotation or click 'Mark Accepted' on a Draft quote");
+                notice("Please click 'Mark Accepted' on a quotation first, then convert it.");
               }
             }}>
-              2. Convert to Active Subscription
+              2. Convert Accepted Quote
+            </button>
+            <button onClick={runBilling}>
+              3. Simulate Monthly Billing Run
             </button>
             <button onClick={() => {
-              runBilling();
-              setPage("Invoices");
+              setPage("Invoices & Payments", "Invoices");
+              notice("Step 4: Click 'Pay Now' on an open invoice to settle it via UPI or Card.");
             }}>
-              3. Run Monthly Invoicing Cycle
-            </button>
-            <button onClick={() => {
-              setPage("Invoices");
-              notice("Click 'Pay Now' on any unpaid invoice to settle it immediately!");
-            }}>
-              4. Settle Invoice & Update Revenue
+              4. Pay Recurring Invoice
             </button>
           </div>
         </div>
       </section>
 
       <section className="guide-section">
-        <h3>3 User Roles & Access Boundaries</h3>
+        <h3>Role Based Workflows</h3>
         <p>
-          The system enforces strict role-based access control (RBAC). Customer data is isolated so Customer A can never see Customer B's records. Click below to test each persona immediately:
+          Brightloop enforces strict Role-Based Access Control (RBAC) across three distinct user roles:
         </p>
-
         <div className="guide-role-grid">
           <div className="guide-role-box">
-            <div>
-              <b>1. Master Admin</b>
-              <small style={{ color: "#7455e8", fontWeight: 600, display: "block", margin: "2px 0 6px" }}>admin@brightloop.local · Brightloop@2026</small>
-              <p>
-                Full administrative control. Configures products, pricing plans, automated tax rules (GST 18%), volume discounts, invites staff employees, and simulates monthly billing runs.
-              </p>
-            </div>
-            <button onClick={() => quickSwitchRole("admin")}>
-              {user?.role === "admin" ? "Current Active View" : "Switch to Admin"}
-            </button>
+            <b>1. Admin (Master Owner)</b>
+            <p>
+              Full operational and financial control. Configures products, plans, tax rules, volume discount tiers, and manages the staff team. Only the admin can add staff.
+            </p>
+            <button onClick={() => quickSwitchRole("admin")}>Switch to Admin View</button>
           </div>
 
           <div className="guide-role-box">
-            <div>
-              <b>2. Staff (Sales & Operations)</b>
-              <small style={{ color: "#7455e8", fontWeight: 600, display: "block", margin: "2px 0 6px" }}>sales@brightloop.com · Brightloop@2026</small>
-              <p>
-                Sales and support workspace. Manages customer directory, creates sales quotations, converts accepted quotes to subscriptions, and tracks customer invoices. Cannot manage staff accounts or tax rules.
-              </p>
-            </div>
-            <button onClick={() => quickSwitchRole("staff")}>
-              {user?.role === "staff" ? "Current Active View" : "Switch to Staff"}
-            </button>
+            <b>2. Staff (Sales & Operations)</b>
+            <p>
+              Handles daily sales: registers customer accounts, creates and sends quotations, converts accepted quotes into live subscriptions, and follows up on unpaid invoices.
+            </p>
+            <button onClick={() => quickSwitchRole("staff")}>Switch to Staff View</button>
           </div>
 
           <div className="guide-role-box">
-            <div>
-              <b>3. Customer Portal (Acme Corp)</b>
-              <small style={{ color: "#7455e8", fontWeight: 600, display: "block", margin: "2px 0 6px" }}>contact@acmecorp.com · Brightloop@2026</small>
-              <p>
-                Self-service customer portal. Acme Corp can view their active software tier, download invoices, and pay bills online via UPI/Card with zero visibility into other clients.
-              </p>
-            </div>
-            <button onClick={() => quickSwitchRole("customer")}>
-              {user?.role === "customer" ? "Current Active View" : "Switch to Customer"}
-            </button>
+            <b>3. Customer (Client Portal)</b>
+            <p>
+              Strictly private self-service portal. Customer A only ever sees their own subscriptions, invoices, and payment receipts. Can pay invoices and upgrade seat plans.
+            </p>
+            <button onClick={() => quickSwitchRole("customer")}>Switch to Customer Portal</button>
           </div>
         </div>
       </section>
 
       <section className="guide-section">
-        <h3>The 5 Core Workflow Stages</h3>
+        <h3>Step by Step Lifecycle Walkthrough</h3>
         <div className="guide-steps-list">
           <div className="guide-step-row">
             <span className="guide-step-badge">1</span>
             <div className="guide-step-body">
               <b>Products & Pricing Plans</b>
               <p>
-                Products are what the company sells (e.g. Business Software at ₹1,000/month or Cloud Storage at ₹500/month). Plans define how customers pay (Monthly, Yearly, Weekly, Daily) and seat minimums.
+                Products are what the company sells (e.g., Business Software). Plans define the recurring billing frequency (Daily, Weekly, Monthly, Yearly) and price per seat.
               </p>
-              <button onClick={() => setPage("Products")}>Open Products Catalog</button>
+              <button onClick={() => setPage("Products & Plans", "Products")}>Open Products & Plans</button>
             </div>
           </div>
 
@@ -1144,7 +1294,7 @@ function GuidePanel({ setPage, quickSwitchRole, user, runBilling, convertQuote, 
             <div className="guide-step-body">
               <b>Sales Quotations</b>
               <p>
-                When a customer asks for a quote (e.g. "We need 10 seats of Business Software"), staff creates a Quotation. Brightloop automatically calculates line totals, applies volume discounts (10% off for 10+ seats), and adds GST (18%). Staff clicks "Send", and the client accepts.
+                Staff creates a proposal for a customer (e.g. 10 seats of Business Software). Applicable taxes (e.g., GST 18%) and volume discounts are calculated automatically. The quote moves: Draft -&gt; Sent -&gt; Accepted.
               </p>
               <button onClick={() => setPage("Quotations")}>Open Quotations</button>
             </div>
@@ -1168,7 +1318,7 @@ function GuidePanel({ setPage, quickSwitchRole, user, runBilling, convertQuote, 
               <p>
                 When renewal day arrives, Brightloop automatically generates invoices. In testing, clicking "Simulate monthly billing run" immediately generates recurring invoices for all subscriptions due today.
               </p>
-              <button onClick={() => setPage("Invoices")}>Open Invoices</button>
+              <button onClick={() => setPage("Invoices & Payments", "Invoices")}>Open Invoices</button>
             </div>
           </div>
 
@@ -1188,8 +1338,8 @@ function GuidePanel({ setPage, quickSwitchRole, user, runBilling, convertQuote, 
   );
 }
 
-function ProfilePanel({ user, notify }: any) {
-  const [v, V] = useState<any>({ name: user.name || "", phone: "", company: "" });
+function ProfilePanel({ user, notify, onClose }: any) {
+  const [v, V] = useState<any>({ name: user?.name || "", phone: "", company: "" });
   const [busy, B] = useState(false);
 
   React.useEffect(() => {
@@ -1206,7 +1356,8 @@ function ProfilePanel({ user, notify }: any) {
         localStorage.setItem("brightloop_token", r.data.data.token);
         api.defaults.headers.common.Authorization = "Bearer " + r.data.data.token;
       }
-      notify("Profile saved");
+      notify("Profile saved successfully");
+      if (onClose) onClose();
     } catch (x: any) {
       notify(x.response?.data?.error || "Unable to save profile");
     } finally {
@@ -1215,17 +1366,19 @@ function ProfilePanel({ user, notify }: any) {
   }
 
   return (
-    <section className="panel profilepanel">
-      <h2>Your profile</h2>
-      <p>Update your contact details and company information.</p>
-      <form onSubmit={save}>
+    <div className="profilepanel">
+      <p style={{ margin: "0 0 16px", color: "#6b7282", fontSize: "12px" }}>Update your contact information and company details.</p>
+      <form onSubmit={save} style={{ display: "grid", gap: "12px" }}>
         <label>Full name<input required value={v.name || ""} onChange={(e) => V({ ...v, name: e.target.value })} /></label>
-        <label>Email address<input disabled value={user.email} /></label>
-        <label>Phone<input value={v.phone || ""} onChange={(e) => V({ ...v, phone: e.target.value })} /></label>
-        <label>Company<input value={v.company || ""} onChange={(e) => V({ ...v, company: e.target.value })} /></label>
-        <button className="primary" disabled={busy}>{busy ? "Saving..." : "Save profile"}</button>
+        <label>Email address<input disabled value={user?.email || ""} style={{ background: "#f5f6f9", color: "#777" }} /></label>
+        <label>Phone number<input value={v.phone || ""} placeholder="+91 98765 43210" onChange={(e) => V({ ...v, phone: e.target.value })} /></label>
+        <label>Company name<input value={v.company || ""} placeholder="Acme Technologies" onChange={(e) => V({ ...v, company: e.target.value })} /></label>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+          {onClose && <button type="button" className="secondary" onClick={onClose}>Cancel</button>}
+          <button className="primary" disabled={busy}>{busy ? "Saving..." : "Save changes"}</button>
+        </div>
       </form>
-    </section>
+    </div>
   );
 }
 
@@ -1524,9 +1677,14 @@ function Table({ rows, onDelete, onEdit, onConvert, onStatusChange, onSend, onPr
   );
 }
 
-function Form({ kind, record, close, submit, customers = [], staff = [], invoices = [], plans = [], products = [], templates = [] }: any) {
+function Form({ kind, record, close, submit, customers = [], staff = [], invoices = [], plans = [], products = [] }: any) {
   const [v, V] = useState<any>(() => ({ status: kind === "New quotation" || kind === "New subscription" ? "Draft" : "Active", ...(record || {}) }));
   const [items, Items] = useState<any[]>(() => record?.items?.length ? record.items : [{ description: "", product: "", quantity: 1, unitPrice: 0, taxRate: 0 }]);
+  const [variantsList, setVariantsList] = useState<any[]>(() => {
+    if (Array.isArray(record?.variants) && record.variants.length > 0) return record.variants;
+    return [{ name: "Odoo ERP Connector", type: "Add-on Module", priceDelta: 560 }];
+  });
+
   const customerNeeded = ["New subscription", "New invoice", "New quotation"].includes(kind);
   const isWorkItem = kind === "New work item";
   const isPayment = kind === "New payment";
@@ -1537,16 +1695,16 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
   const isStaff = kind === "New staff";
   const isDiscount = kind === "New discount";
   const isTax = kind === "New tax";
-  const isTemplate = kind === "New quotation template";
   const isSub = kind === "New subscription";
   const isQuote = kind === "New quotation";
   const isInvoice = kind === "New invoice";
 
   const set = (key: string, value: any) => V((old: any) => ({ ...old, [key]: value }));
-  const text = (label: string, key: string, type = "text", required = false, props = {}) => (
+  const text = (label: string, key: string, type = "text", required = false, props = {}, helperText?: string) => (
     <label>
       {label}
       <input type={type} required={required} value={v[key] ?? ""} onChange={(e) => set(key, type === "number" ? Number(e.target.value) : e.target.value)} {...props} />
+      {helperText && <span className="form-helper">{helperText}</span>}
     </label>
   );
 
@@ -1563,16 +1721,13 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
   );
 
   const patchItem = (index: number, key: string, value: any) => Items((old) => old.map((line, i) => i === index ? { ...line, [key]: value } : line));
-  const choosePlan = (value: string) => {
-    const p = plans.find((x: any) => (x.planName || x.name) === value);
-    V((old: any) => ({ ...old, plan: value, amount: p?.price ?? old.amount, billingFrequency: p?.billingFrequency || old.billingFrequency, minimumQuantity: p?.minimumQuantity || 1 }));
+
+  const updateVariant = (index: number, key: string, value: any) => {
+    setVariantsList((old) => old.map((item, i) => i === index ? { ...item, [key]: value } : item));
   };
 
-  const chooseTemplate = (value: string) => {
-    const t = templates.find((x: any) => (x.name || x.templateName) === value);
-    if (!t) return;
-    V((old: any) => ({ ...old, template: value, plan: t.plan || old.plan, amount: t.amount ?? old.amount, validDays: t.validDays || 30, validUntil: new Date(Date.now() + Number(t.validDays || 30) * 86400000).toISOString().slice(0, 10) }));
-    if (t.items?.length) Items(t.items);
+  const removeVariant = (index: number) => {
+    setVariantsList((old) => old.filter((_, i) => i !== index));
   };
 
   const onSubmit = (e: any) => {
@@ -1582,16 +1737,21 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
     if (isInvoice || isSub || isQuote) {
       out.amount = formItems.filter((line) => line.product || line.description).reduce((sum, line) => sum + Number(line.quantity || 1) * Number(line.unitPrice || 0), 0) || Number(v.amount || 0);
     }
-    if (isProduct && typeof v.variantsText === "string") {
-      out.variants = v.variantsText.split("\n").map((line: string) => line.trim()).filter(Boolean).map((line: string) => {
-        const [name, delta] = line.split("|");
-        return { name: name.trim(), priceDelta: Number(delta || 0) };
-      });
+    if (isProduct) {
+      out.variants = variantsList.filter((x) => x.name && x.name.trim()).map((x) => ({
+        name: x.name.trim(),
+        type: x.type || "Add-on Module",
+        priceDelta: Number(x.priceDelta || 0)
+      }));
     }
     submit(out);
   };
 
-  const variantsText = v.variantsText ?? (Array.isArray(v.variants) ? v.variants.map((x: any) => `${x.name}|${x.priceDelta || 0}`).join("\n") : "");
+  // Live profit margin calculation for product form
+  const salesPrice = Number(v.salesPrice || 0);
+  const costPrice = Number(v.costPrice || 0);
+  const grossMargin = salesPrice - costPrice;
+  const marginPct = salesPrice > 0 ? ((grossMargin / salesPrice) * 100).toFixed(1) : "0.0";
 
   return (
     <div className="backdrop" onClick={(e) => e.target === e.currentTarget && close()}>
@@ -1635,12 +1795,27 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
           </>
         )}
 
-        {(isCustomer || isStaff) && (
+        {isCustomer && (
           <>
-            {text("Full name", "name", "text", true)}
-            {text("Email", "email", "email", true)}
-            {isCustomer && text("Company", "company")}
-            {isStaff && <small className="formhint">Staff can sign in with this email after the account is created.</small>}
+            {text("Client Name", "name", "text", true, {}, "Contact person or representative name.")}
+            {text("Client Email", "email", "email", true, {}, "Will be used for customer portal sign-in.")}
+            {text("Company / Organization", "company", "text", false, {}, "Legal company name.")}
+            {text("Phone Number", "phone", "tel", false, { placeholder: "+91 98765 43210" })}
+            <div className="customer-notice" style={{ marginTop: "10px" }}>
+              <span><b>Auto-Provisioning:</b> A private Customer Portal account will be automatically created with password <code>Brightloop@2026</code>. The customer can log in to view their private subscriptions and settle invoices.</span>
+            </div>
+          </>
+        )}
+
+        {isStaff && (
+          <>
+            {text("Staff Member Name", "name", "text", true)}
+            {text("Staff Email", "email", "email", true, {}, "Internal company email.")}
+            {choose("Department / Role", "department", ["Sales Representative", "Operations Manager", "Finance & Billing", "Customer Support"], true)}
+            {text("Initial Password", "password", "text", true, { minLength: 8, placeholder: "Brightloop@2026" }, "Staff member can use this password to log in immediately.")}
+            <div className="customer-notice" style={{ marginTop: "10px" }}>
+              <span><b>Staff Access:</b> Staff can create quotations, convert sales proposals into active subscriptions, and view invoices without access to master configuration.</span>
+            </div>
           </>
         )}
 
@@ -1658,18 +1833,6 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
                 ))}
               </select>
             </label>
-
-            {isQuote && templates.length > 0 && (
-              <label>
-                Start from quotation template
-                <select value={v.template || ""} onChange={(e) => chooseTemplate(e.target.value)}>
-                  <option value="">No template</option>
-                  {templates.map((x: any) => (
-                    <option key={x._id || x.name} value={x.name}>{x.name} ({x.validDays || 30} days)</option>
-                  ))}
-                </select>
-              </label>
-            )}
 
             {(isSub || isQuote) && (plans.length ? choose("Plan", "plan", plans.map((x: any) => ({ value: x.planName || x.name, label: `${x.planName || x.name} · ₹${x.price} / ${x.billingFrequency || "month"}` })), true) : text("Plan", "plan", "text", true))}
 
@@ -1708,12 +1871,67 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
 
         {isProduct && (
           <>
-            {text("Product name", "name", "text", true)}
+            <div className="software-notice">
+              <b>Software Licensing Notice:</b> Unlike physical inventory with limited warehouse stock (e.g. 100 boxes), software is intangible with unlimited digital capacity. Inventory is measured by contracted user seats (e.g. 10 seats, 50 seats) specified on each customer's subscription.
+            </div>
+
+            {text("Product name", "name", "text", true, { placeholder: "e.g. Brightloop ERP" })}
             {choose("Product type", "type", ["Software", "Service", "Physical", "Other"], true)}
-            {text("Sales price (₹)", "salesPrice", "number", true, { min: 0, step: "0.01" })}
-            {text("Cost price (₹)", "costPrice", "number", true, { min: 0, step: "0.01" })}
-            <label>Notes<textarea value={v.notes || ""} onChange={(e) => set("notes", e.target.value)} rows={3} /></label>
-            <label>Variants (one per line: name | price adjustment)<textarea value={variantsText} onChange={(e) => set("variantsText", e.target.value)} rows={3} placeholder="Odoo Connected | 560" /></label>
+            {text("Sales Price (₹)", "salesPrice", "number", true, { min: 0, step: "0.01" }, "Customer-facing selling price charged per seat or license on quotations and invoices.")}
+            {text("Cost Price (₹)", "costPrice", "number", true, { min: 0, step: "0.01" }, "Company's internal direct cost per seat (hosting, compute, API fees) to compute gross profit margin.")}
+
+            <div className="margin-box">
+              <div>
+                <b>Gross Profit Margin per Seat:</b>
+                <div style={{ fontSize: "11px", color: grossMargin >= 0 ? "#15803d" : "#b91c1c" }}>
+                  {grossMargin >= 0 ? `+${fmt(grossMargin)} profit per seat` : `-${fmt(Math.abs(grossMargin))} loss per seat`}
+                </div>
+              </div>
+              <span>{marginPct}% Margin</span>
+            </div>
+
+            <div className="variant-builder">
+              <div className="variant-builder-head">
+                <b>Software Editions & Optional Add-ons</b>
+                <small style={{ color: "#717786" }}>E.g. Odoo ERP Sync (+₹560), Enterprise SLA</small>
+              </div>
+              {variantsList.map((variant, idx) => (
+                <div className="variant-builder-row" key={idx}>
+                  <input
+                    placeholder="Variant name (e.g. Odoo Connector)"
+                    value={variant.name || ""}
+                    onChange={(e) => updateVariant(idx, "name", e.target.value)}
+                  />
+                  <select value={variant.type || "Add-on Module"} onChange={(e) => updateVariant(idx, "type", e.target.value)}>
+                    <option value="Add-on Module">Add-on Module</option>
+                    <option value="Edition Tier">Edition Tier</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="+₹ Price"
+                    value={variant.priceDelta ?? 0}
+                    onChange={(e) => updateVariant(idx, "priceDelta", Number(e.target.value))}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeVariant(idx)}
+                    style={{ border: "1px solid #e0e3eb", background: "#fff", borderRadius: "5px", color: "#8a909f", cursor: "pointer" }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="secondary"
+                style={{ marginTop: "6px", fontSize: "11px", padding: "4px 10px" }}
+                onClick={() => setVariantsList([...variantsList, { name: "", type: "Add-on Module", priceDelta: 0 }])}
+              >
+                + Add Edition or Add-on Module
+              </button>
+            </div>
+
+            <label>Product Description & Notes<textarea value={v.notes || ""} onChange={(e) => set("notes", e.target.value)} rows={2} /></label>
           </>
         )}
 
@@ -1732,16 +1950,7 @@ function Form({ kind, record, close, submit, customers = [], staff = [], invoice
           </>
         )}
 
-        {isTemplate && (
-          <>
-            {text("Template name", "name", "text", true)}
-            {choose("Default plan", "plan", plans.map((x: any) => ({ value: x.planName || x.name, label: x.planName || x.name })))}
-            {text("Valid for (days)", "validDays", "number", true, { min: 1 })}
-            {text("Default amount (₹)", "amount", "number", false, { min: 0, step: "0.01" })}
-          </>
-        )}
-
-        {(isSub || isQuote || isInvoice || isTemplate || isPlanChange) && (
+        {(isSub || isQuote || isInvoice || isPlanChange) && (
           <fieldset className="lineitems">
             <legend>Product lines</legend>
             {items.map((line, index) => (

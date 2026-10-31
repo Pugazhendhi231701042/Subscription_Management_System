@@ -301,11 +301,25 @@ for (const k of names) {
       if (k === "users") {
         item.email = String(item.email || "").toLowerCase().trim();
         if (!/^\S+@\S+\.\S+$/.test(item.email) || await models.users.exists({ email: item.email })) return s.status(409).json({ error: "A valid, unused email address is required" });
-        // Staff sign in through Google using their invited email; keep an undisclosed random hash.
-        item.password = await bcrypt.hash(crypto.randomBytes(48).toString("hex"), 12);
+        if (item.password && String(item.password).length >= 8) {
+          item.password = await bcrypt.hash(item.password, 12);
+          item.status = item.status || "Active";
+        } else {
+          item.password = await bcrypt.hash(crypto.randomBytes(48).toString("hex"), 12);
+          item.status = "Invited";
+        }
         item.role = "staff";
         item.isMasterAdmin = false;
-        item.status = "Invited";
+      }
+      if (k === "customers") {
+        item.email = String(item.email || "").toLowerCase().trim();
+        const existingUser = connected ? await models.users.findOne({ email: item.email }) : memory.users.find((u) => u.email === item.email);
+        if (!existingUser) {
+          const custPassword = item.password ? await bcrypt.hash(item.password, 12) : await bcrypt.hash("Brightloop@2026", 12);
+          const uDoc = { email: item.email, name: item.name || item.company || "Customer", phone: item.phone, company: item.company || item.name, role: "customer", password: custPassword, tokenVersion: 0 };
+          if (connected) await models.users.create(uDoc);
+          else memory.users.push({ _id: Date.now() + 2, ...uDoc });
+        }
       }
       if (k === "quotations" && item.validDays && !item.validUntil) item.validUntil = new Date(Date.now() + Number(item.validDays) * 864e5);
       if (k === "invoices" && item.customer) {
@@ -527,6 +541,21 @@ app.get("/api/dashboard", auth, async (q, s) => {
     for (const invoice of invoices) { const date = invoice.invoiceDate ? new Date(invoice.invoiceDate) : new Date(invoice.createdAt || Date.now()), key = date.toLocaleString("en", { month: "short", year: "numeric" }); chartMap[key] ||= { month: key, revenue: 0 }; chartMap[key].revenue += Number(invoice.paidAmount || 0); }
     return s.json({ data: { customers, activeSubscriptions: active.length, mrr, arr: mrr * 12, collected: invoices.reduce((a, x) => a + Number(x.paidAmount || 0), 0), outstanding: invoices.reduce((a, x) => a + Number(x.outstandingAmount ?? x.total ?? x.amount ?? 0), 0), overdue: invoices.filter((x) => x.status === "Overdue").length, chart: Object.values(chartMap) } });
   } catch (e) { s.status(500).json({ error: e.message }); }
+});
+app.post("/api/admin/clear-data", auth, admin, async (q, s) => {
+  try {
+    for (const coll of ["subscriptions", "invoices", "quotations", "payments"]) {
+      if (connected) await models[coll].deleteMany({});
+      else memory[coll] = [];
+    }
+    if (q.body.wipeCustomers) {
+      if (connected) await models.customers.deleteMany({});
+      else memory.customers = [];
+    }
+    s.json({ data: { cleared: true, message: "Transactional records have been cleared." } });
+  } catch (e) {
+    s.status(500).json({ error: e.message });
+  }
 });
 app.post("/api/invoices/:id/status", auth, async (q, s) => {
   if (q.user.role === "customer") return s.status(403).json({ error: "Forbidden" });
