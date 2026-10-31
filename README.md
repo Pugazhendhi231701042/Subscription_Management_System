@@ -1,136 +1,64 @@
-# Brightloop Subscription Management System 🚀
-> **Odoo x Make-A-Ton 9.0 Kochi Hackathon 2026 — Virtual Round**  
-> **Problem Statement:** Subscription Management System — Build one unified system to run plans, subscriptions, and recurring billing in one place.
+# BRIGHTLOOP · Smart Subscriptions. Simplified Billing.
 
----
+A React/Vite subscription dashboard with an Express REST API, JWT auth, bcrypt password storage, local SQLite persistence, recurring invoice job, and responsive login/registration.
 
-## 📌 Executive Summary
+## Start locally
 
-**Brightloop Software** sells software products on subscription (billed monthly or yearly), add-ons, and variants. Previously, subscriptions were tracked in spreadsheets, renewals remembered manually, invoices typed by hand, payments reconciled via bank statement scrolling, and quarterly reports compiled manually.
+1. Install Node.js 22.13+ (the project uses Node SQLite support).
+2. Copy .env.example to .env. Set a strong `MASTER_ADMIN_PASSWORD` before initializing a new database, and generate a random `JWT_SECRET` of at least 32 characters. The SQLite database is created at `./data/brightloop.sqlite` by default (override with `DATABASE_PATH`).
+3. Run npm install.
+4. Run npm run dev for the Vite app (http://localhost:5173) and API (http://localhost:4000). You can also run npm run client and npm run server separately.
+5. On first start, Brightloop creates the master admin using `MASTER_ADMIN_EMAIL` and `MASTER_ADMIN_PASSWORD`. Startup preserves existing records, including when recording a migration marker. Public sign-up creates customer accounts; only an admin can create staff accounts.
 
-This platform provides the **digital backbone** for Brightloop Software:
-- **Full Subscription Lifecycle**: Seamless transition from `Draft` ➔ `Quotation` ➔ `Confirmed` ➔ `Active` ➔ `Closed`.
-- **Automated Recurring Billing Engine**: Scheduled/on-demand batch billing for hundreds of accounts without duplicate billing or skipped cycles.
-- **Dynamic Product & Variant Modeling**: Support for base products, configurable variants (e.g., brand additions), and lifecycle plans (daily, weekly, monthly, yearly).
-- **Intelligent Discount & Tax Engine**: Automatic tier/seat/coupon discount application and multi-rule tax calculations.
-- **Multi-Method Payment & Overdue Tracking**: Real-time payment reconciliation (UPI, Card, Bank Transfer, Cash) with partial payment handling.
-- **Role-Based Access Control (RBAC)**: Dedicated interfaces for **Admin**, **Internal Staff**, and **Customer Portal**.
-- **Executive Finance Dashboard**: Real-time ARR/MRR, active subscriber counts, aging receivables, and sub-2-second query response times.
+All changes are stored in the local SQLite file and remain after the server stops.
 
----
+## Accounts
 
-## 🏗️ System Architecture & Database Design
+There are no demo customer or staff accounts. The first startup creates one master admin (`MASTER_ADMIN_EMAIL`, default `admin@brightloop.local`). For a new database, `MASTER_ADMIN_PASSWORD` must be configured; the server never prints passwords. Customers create their own accounts on the sign-up page; the master admin creates staff accounts from the Staff page. All protected API requests use expiring JWT bearer tokens and validate that the account still exists.
 
-### Relational Schema (PostgreSQL / SQLite via Prisma ORM)
-The database enforces strict relational integrity with foreign keys, composite unique constraints, and indexes:
+## Enable Google sign-in
 
-```
-┌──────────────┐       ┌─────────────────┐       ┌──────────────────┐
-│    Users     │       │    Products     │       │ ProductVariants  │
-├──────────────┤       ├─────────────────┤       ├──────────────────┤
-│ id (PK)      │       │ id (PK)         │◄──────┤ id (PK)          │
-│ email (UQ)   │       │ name            │       │ product_id (FK)  │
-│ passwordHash │       │ type            │       │ variant_name     │
-│ role         │       │ sales_price     │       │ price_adjustment │
-└──────┬───────┘       │ cost_price      │       └──────────────────┘
-       │               └────────┬────────┘
-       │                        │
-       ▼                        ▼
-┌──────────────┐       ┌─────────────────┐       ┌──────────────────┐
-│  Customers   │       │      Plans      │       │   Taxes & Rules  │
-├──────────────┤       ├─────────────────┤       ├──────────────────┤
-│ id (PK)      │       │ id (PK)         │       │ id (PK)          │
-│ user_id (FK) │       │ product_id (FK) │       │ name, rate       │
-│ company_name │       │ frequency       │       │ tax_type         │
-│ email, phone │       │ min_quantity    │       └──────────────────┘
-└──────┬───────┘       │ auto_close_flag │
-       │               └────────┬────────┘
-       │                        │
-       ├────────────────────────┴──────────────────────┐
-       ▼                                               ▼
-┌──────────────────────┐                     ┌──────────────────────┐
-│     Quotations       │                     │    Subscriptions     │
-├──────────────────────┤                     ├──────────────────────┤
-│ id (PK)              │                     │ id (PK)              │
-│ quotation_number(UQ) │                     │ subscription_num(UQ) │
-│ customer_id (FK)     │                     │ customer_id (FK)     │
-│ plan_id (FK)         │                     │ plan_id (FK)         │
-│ validity_days        │                     │ status               │
-│ status, total        │                     │ start_date, end_date │
-└──────────┬───────────┘                     │ next_billing_date    │
-           │                                 └──────────┬───────────┘
-           │ convert                                    │
-           └────────────────────────────────────────────┤
-                                                        ▼
-┌──────────────────────┐                     ┌──────────────────────┐
-│   Invoice Payments   │                     │   Invoices (Billing) │
-├──────────────────────┤                     ├──────────────────────┤
-│ id (PK)              │                     │ id (PK)              │
-│ invoice_id (FK)      │◄────────────────────┤ invoice_number (UQ)  │
-│ payment_method       │                     │ subscription_id (FK) │
-│ amount, payment_date │                     │ period_start, end    │
-│ reference_number     │                     │ subtotal, tax, total │
-│ status               │                     │ status               │
-└──────────────────────┘                     └──────────────────────┘
-```
+1. In Google Cloud Console, configure the OAuth consent screen and create an OAuth client ID with application type **Web application**.
+2. Add `http://localhost:5173` to Authorized JavaScript origins. Add your deployed website origin when you publish the app.
+3. Put that OAuth client ID (not a client secret) in both `GOOGLE_CLIENT_ID` and `VITE_GOOGLE_CLIENT_ID` in `.env`.
+4. Restart `npm run dev`. Google sign-in creates customer accounts and allows invited staff accounts to sign in only when their verified Google email matches the email created by the admin. The master admin account remains password-only. The server validates Google’s signed ID token, issuer, audience, expiry, and verified email before issuing a Brightloop JWT.
+## Main modules
 
----
+- Customer self-registration and Google sign-in, unique normalized email addresses, strong-password validation, password reset, remember-me, and database-verified JWT sessions. The master admin can create staff invitations; staff use Google sign-in with their invited email. Invited staff become active on their first successful sign-in, and the admin can close or reactivate accounts.
+- Staff work tracking: admins assign work to invited or active staff; assignees update progress through Open, In progress, Blocked, and Closed, with completion timestamps visible to the admin.
+- Admin, staff, and customer access. Customers can view their own subscriptions, invoices, and payments, browse active products and plans, pause/resume/cancel subscriptions, and change plan or seat count.
+- Products with type, sales/cost prices, notes, and price-adjusted variants. Plans include billing frequency, minimum quantity, availability dates, automatic close, and renewal settings.
+- Reusable quotation templates with validity days and product lines. Quotations track status and accepted quotes can be converted into subscriptions with saved details.
+- Subscription lifecycle transitions, recurring invoices from subscription lines, due-date aging, automatic tax and discount calculations, duplicate-period protection, confirmation/cancel/send/print invoice actions.
+- Discount rules support fixed or percentage values, date windows, minimum spend or quantity, usage limits, and product or subscription scope.
+- Payments record invoice, amount, method, date, and note; payment records update paid and outstanding invoice balances.
+- Finance dashboard summaries and revenue charts use records in SQLite. Lists support server-side search, status filters, and pages of up to 100 records.
 
-## 👥 Team & Work Distribution
+## API quick reference
 
-| Team Member | GitHub Username | Core Responsibilities |
-|-------------|-----------------|----------------------|
-| **Pugazhendhi B (Lead)** | `@Pugazhendhi231701042` | Architecture, Database Modeling, State Machine, Integration & Deployment |
-| **Khadeejah Nuhaa** | `@khadeejahnuhaa08` | Authentication, RBAC, Customer Isolation, Security & Audit Logs |
-| **Lakshmi Bhargavi** | `@Lakshmi-230401077` | Product Catalog, Variants, Plans, Quotation Templates & Lifecycle |
-| **Hemanth** | Pending | Automated Billing Engine, Invoicing, Discounts, Payments & Finance Dashboard |
+- POST /api/auth/register, POST /api/auth/login, GET /api/auth/me
+- POST /api/auth/forgot-password, POST /api/auth/reset-password
+- GET /api/health, GET /api/dashboard
+- GET/POST/PATCH/DELETE /api/{customers,products,plans,quotations,subscriptions,invoices,payments,discounts,taxes,users}
+- POST /api/quotations/:id/convert (accepted quotations only)
+- POST /api/subscriptions/:id/status
+- GET/POST/PATCH/DELETE /api/workItems (admin-assigned staff work tracking; statuses Open, In progress, Blocked, Closed)
 
----
+Protected endpoints require `Authorization: Bearer <token>`. List endpoints accept limit (max 100).
 
-## ⚡ Tech Stack
+## Build and deployment
 
-- **Frontend**: React 18 / Next.js / TypeScript, Tailwind CSS, Lucide Icons, Shadcn UI patterns.
-- **Backend**: Node.js / Express REST API with modular controllers, service layers, and validation.
-- **Database & ORM**: PostgreSQL / SQLite with Prisma ORM (relational schemas, indexed queries, composite unique constraints).
-- **Validation**: Strict schema validation with regex password complexity (uppercase, lowercase, special char, >8 chars) and email integrity.
-- **Billing Scheduler**: Automated idempotency-guaranteed recurring billing runner with dry-run and simulation controls.
+- npm run build creates dist/.
+- Deploy the Vite frontend to Vercel. Set VITE_API_URL to the Render API base ending in /api.
+- Deploy server.js to a host with persistent disk storage. Configure DATABASE_PATH, JWT_SECRET, CLIENT_URL and optional SMTP_* variables. SQLite needs a persistent disk on hosting platforms.
+- Keep the master admin password and JWT_SECRET private. Back up the SQLite file before upgrading or deleting local data.
 
----
+## Current limitations
 
-## 🛠️ Quick Start
-
-### 1. Prerequisites
-- Node.js (v18+)
-- npm / yarn / pnpm
-
-### 2. Setup & Installation
-```bash
-# Clone the repository
-git clone https://github.com/Pugazhendhi231701042/Subscription_Management_System.git
-cd Subscription_Management_System
-
-# Install dependencies
-npm install
-
-# Run database migrations and seed realistic demo data
-npx prisma migrate dev --name init
-npx prisma db seed
-
-# Launch development servers
-npm run dev
-```
-
----
-
-## 🌟 Hackathon Evaluation Compliance Checklist
-
-- [x] **Database Design**: Normalized relational tables, foreign key constraints, composite index on billing periods.
-- [x] **No BAAS Dependency**: Clean local relational database without relying on Firebase, Supabase, or unstructured MongoDB.
-- [x] **Dynamic Real-Time Data**: Dynamic database queries and REST APIs.
-- [x] **Robust Input Validation**: Strict client-side and server-side validation.
-- [x] **Git & Collaboration**: Distinct commits by all team members reflecting individual contributions.
-- [x] **Sub-2s Query Performance**: Indexed lookups on customer, subscription status, and billing cycle.
-- [x] **Intuitive Odoo-like UI**: Statusbar pipelines, smart buttons, actionable filters, and unified financial analytics.
-
----
-*Developed with ❤️ for Odoo x Make-A-Ton 9.0 Kochi Hackathon 2026*
+- Invoice and password-reset email delivery requires SMTP credentials. In development, password reset links are returned locally; production reports a configuration error until SMTP is set.
+- Invoice printing uses the browser print dialog, including Save as PDF; the app does not create a stored PDF attachment.
+- Payments are staff-recorded bookkeeping entries. There is no card/UPI payment gateway or automatic bank reconciliation.
+- Customer plan changes apply to the subscription’s next recurring invoice. Proration, refunds, usage-based metering, and a full add-on catalog workflow are not implemented.
+- The API returns a maximum of 100 records per page. Database indexes and dashboard aggregation support larger accounts, but the PDF’s under-two-second response target has not been load-tested.
+- SQLite stores data in a local file. For cloud hosting, that file must be placed on a persistent disk; ephemeral containers can lose it. Recurring billing is idempotent per subscription period, but external email delivery and production concurrency still need deployment-level checks.
+- The UI bundle remains above Vite’s 500 kB advisory threshold.
