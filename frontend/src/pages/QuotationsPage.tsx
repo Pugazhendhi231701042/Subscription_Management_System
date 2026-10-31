@@ -13,7 +13,9 @@ import {
   Calendar,
   Layers,
   Sparkles,
-  Trash2
+  Trash2,
+  Printer,
+  Download
 } from 'lucide-react';
 
 export const QuotationsPage: React.FC = () => {
@@ -26,6 +28,7 @@ export const QuotationsPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [selectedQuote, setSelectedQuote] = useState<Quotation | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
   const [converting, setConverting] = useState<boolean>(false);
 
   // New quote form state
@@ -156,6 +159,30 @@ export const QuotationsPage: React.FC = () => {
     }
   }
 
+  function exportQuotationsCSV() {
+    if (quotations.length === 0) return;
+    const headers = ['Quotation #', 'Customer', 'Plan', 'Validity Date', 'Subtotal', 'Tax Amount', 'Total Amount', 'Status'];
+    const rows = quotations.map(q => [
+      q.quotationNumber,
+      `"${q.customer?.companyName || ''}"`,
+      `"${q.plan?.name || ''}"`,
+      new Date(q.validityDate).toLocaleDateString(),
+      q.subtotal,
+      q.taxAmount,
+      q.totalAmount,
+      q.status
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Brightloop_Quotations_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   // Calculate live totals for new quote modal
   const liveSubtotal = lines.reduce((acc, l) => acc + (l.quantity * (l.unitPrice || 0)), 0);
   const liveTax = lines.reduce((acc, l) => acc + ((l.quantity * (l.unitPrice || 0) * (l.taxRate || 18)) / 100), 0);
@@ -169,22 +196,32 @@ export const QuotationsPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center">
             <FileText className="w-6 h-6 mr-2 text-[#714B67]" />
-            Sales Quotations & Offers
+            Sales Quotations & Proposals
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Build proposals from quotation templates, set line variants, and convert to subscriptions.
           </p>
         </div>
 
-        {user?.role !== 'CUSTOMER' && (
+        <div className="flex items-center space-x-2">
           <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-lg bg-[#714B67] hover:bg-[#5b3b52] text-white text-sm font-semibold shadow-md transition-all active:scale-95"
+            onClick={exportQuotationsCSV}
+            className="flex items-center space-x-1 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
           >
-            <Plus className="w-4 h-4" />
-            <span>Create Quotation</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
           </button>
-        )}
+
+          {user?.role !== 'CUSTOMER' && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-[#714B67] hover:bg-[#5b3b52] text-white text-xs font-bold shadow-md transition-all active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Quotation</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Quotations List */}
@@ -472,7 +509,15 @@ export const QuotationsPage: React.FC = () => {
                 <h3 className="text-xl font-bold text-slate-900 font-mono">{selectedQuote.quotationNumber}</h3>
                 <div className="text-xs text-slate-500">Customer: {selectedQuote.customer?.companyName}</div>
               </div>
-              <button onClick={() => setSelectedQuote(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowPrintModal(true)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center"
+                >
+                  <Printer className="w-3.5 h-3.5 mr-1" /> Print Proposal
+                </button>
+                <button onClick={() => setSelectedQuote(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+              </div>
             </div>
 
             <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -518,6 +563,70 @@ export const QuotationsPage: React.FC = () => {
                   ₹{selectedQuote.totalAmount.toLocaleString('en-IN')}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Printable Quotation Modal */}
+      {showPrintModal && selectedQuote && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-8 space-y-6 border border-slate-200">
+            <div className="flex justify-between items-start border-b border-slate-200 pb-6">
+              <div>
+                <div className="text-2xl font-black text-[#714B67]">Brightloop Software</div>
+                <div className="text-xs text-slate-400 mt-1">Official Business Subscription Quotation</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xl font-bold font-mono text-slate-900">{selectedQuote.quotationNumber}</div>
+                <div className="text-xs text-slate-500">Valid Until: {new Date(selectedQuote.validityDate).toLocaleDateString()}</div>
+              </div>
+            </div>
+
+            <div>
+              <span className="text-[10px] font-bold uppercase text-slate-400">Proposed To:</span>
+              <div className="font-bold text-slate-800 text-sm">{selectedQuote.customer?.companyName}</div>
+              <div className="text-xs text-slate-500">{selectedQuote.customer?.email}</div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 border-b">
+                  <tr>
+                    <th className="py-2.5 px-3">Product Description</th>
+                    <th className="py-2.5 px-3 text-right">Qty</th>
+                    <th className="py-2.5 px-3 text-right">Unit Price</th>
+                    <th className="py-2.5 px-3 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {selectedQuote.lines.map((l, i) => (
+                    <tr key={i}>
+                      <td className="py-2 px-3 font-semibold">{l.product?.name} ({l.variant?.variantName || 'Standard'})</td>
+                      <td className="py-2 px-3 text-right">{l.quantity}</td>
+                      <td className="py-2 px-3 text-right">₹{l.unitPrice}</td>
+                      <td className="py-2 px-3 text-right font-bold">₹{l.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center pt-2 text-xs">
+              <div className="text-slate-400 italic">Terms: {selectedQuote.paymentTerms}</div>
+              <div className="text-right">
+                <div className="text-slate-500">Total with 18% GST:</div>
+                <div className="text-xl font-extrabold text-[#714B67]">₹{selectedQuote.totalAmount.toLocaleString('en-IN')}</div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-4 border-t">
+              <button onClick={() => setShowPrintModal(false)} className="px-3 py-1.5 bg-slate-100 rounded text-xs">
+                Close
+              </button>
+              <button onClick={() => window.print()} className="px-4 py-1.5 bg-[#714B67] text-white rounded text-xs font-bold">
+                Print Proposal
+              </button>
             </div>
           </div>
         </div>
