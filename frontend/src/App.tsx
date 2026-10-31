@@ -110,38 +110,44 @@ const IconCheck = ({ size = 14, className = "" }: { size?: number; className?: s
   </svg>
 );
 
+const IconBook = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
+    <path d="M6 6h10" />
+    <path d="M6 10h10" />
+  </svg>
+);
+
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || "/api" });
 const fmt = (n: number | string | undefined | null) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(n) || 0);
 
-const initial: Record<string, any[]> = { staff: [], plans: [], quotations: [], quotationTemplates: [], payments: [], discounts: [], taxes: [], customers: [], subscriptions: [], invoices: [], products: [], workItems: [], chart: [] };
+const initial: Record<string, any[]> = { staff: [], plans: [], quotations: [], payments: [], discounts: [], taxes: [], customers: [], subscriptions: [], invoices: [], products: [], chart: [] };
 
 const links = [
   ["Overview", IconDashboard],
+  ["User Guide", IconBook],
   ["Customers", IconUsers],
-  ["Staff", IconUsers],
-  ["Work", IconActivity],
   ["Products", IconPackage],
   ["Plans", IconPackage],
   ["Quotations", IconFileText],
-  ["Quotation templates", IconFileText],
   ["Subscriptions", IconRepeat],
   ["Invoices", IconFileText],
   ["Payments", IconCreditCard],
   ["Discounts", IconActivity],
   ["Taxes", IconActivity],
   ["Reports", IconActivity],
+  ["Staff", IconUsers],
   ["Profile", IconUsers]
 ];
 
 const pageDescriptions: Record<string, string> = {
   Overview: "Live operational metrics of your active subscriptions, monthly recurring revenue, and cash collections.",
+  "User Guide": "Complete step-by-step walkthrough, testing instructions, and role reference for Brightloop.",
   Customers: "Client accounts and companies using Brightloop Software.",
   Staff: "Internal employees. Only the master admin can manage staff accounts.",
-  Work: "Operational task tracker for support and sales teams.",
   Products: "Catalog of software products, add-on modules, and edition variants.",
   Plans: "Pricing intervals (Monthly, Yearly, Weekly, Daily) and minimum seat requirements.",
   Quotations: "Official proposals sent to clients. When accepted, convert them directly into active subscriptions.",
-  "Quotation templates": "Reusable quotation templates with preset line items and validity days.",
   Subscriptions: "Active recurring software contracts. Automatically bills customer accounts on their renewal date.",
   Invoices: "Recurring invoices generated from active subscriptions. Shows paid, pending, and overdue balances.",
   Payments: "Payment ledger tracking every rupee received via UPI, Card, Bank Transfer, or Cash.",
@@ -247,13 +253,11 @@ export function App() {
       "payments",
       "plans",
       "quotations",
-      "quotationTemplates",
-      ...(user?.role === "customer" ? [] : ["workItems"]),
       ...(user?.role === "admin" ? ["discounts", "taxes", "users"] : [])
     ];
     Promise.all(keys.map((k2) => api.get("/" + k2, { params: { page: 1, limit: 100 } }).catch(() => null))).then((r) => {
       let n: Record<string, any[]> = { ...initial }, pages: Record<string, any> = {};
-      const targets = ["customers", "subscriptions", "invoices", "products", "payments", "plans", "quotations", "quotationTemplates", "workItems", "discounts", "taxes", "staff"];
+      const targets = ["customers", "subscriptions", "invoices", "products", "payments", "plans", "quotations", "discounts", "taxes", "staff"];
       targets.forEach((target) => {
         const source = target === "staff" ? "users" : target;
         const i = keys.indexOf(source);
@@ -269,10 +273,10 @@ export function App() {
     });
   }, [user]);
 
-  const pageMap: Record<string, string> = { Work: "workItems", Overview: "subscriptions", Reports: "subscriptions", Customers: "customers", Staff: "staff", Products: "products", Plans: "plans", Quotations: "quotations", "Quotation templates": "quotationTemplates", Subscriptions: "subscriptions", Invoices: "invoices", Payments: "payments", Discounts: "discounts", Taxes: "taxes", Profile: "profile" };
+  const pageMap: Record<string, string> = { Overview: "subscriptions", "User Guide": "guide", Reports: "subscriptions", Customers: "customers", Staff: "staff", Products: "products", Plans: "plans", Quotations: "quotations", Subscriptions: "subscriptions", Invoices: "invoices", Payments: "payments", Discounts: "discounts", Taxes: "taxes", Profile: "profile" };
 
   React.useEffect(() => {
-    if (!user || !pageMap[page] || ["Overview", "Reports", "Profile"].includes(page)) return;
+    if (!user || !pageMap[page] || ["Overview", "Reports", "Profile", "User Guide"].includes(page)) return;
     const key = pageMap[page] === "staff" ? "users" : pageMap[page];
     const timer = setTimeout(() => api.get("/" + key, { params: { page: 1, limit: 100, search: q, status: filter === "All" ? "" : filter } }).then((r) => {
       const target = key === "users" ? "staff" : key;
@@ -487,7 +491,7 @@ export function App() {
 
   if (!user) return <Auth onLogin={(u: any) => U(u)} />;
 
-  const visibleLinks = links.filter(([n]) => user.role === "customer" ? ["Overview", "Products", "Plans", "Subscriptions", "Invoices", "Payments", "Profile"].includes(n as string) : user.role === "staff" ? ["Overview", "Customers", "Work", "Quotation templates", "Quotations", "Subscriptions", "Invoices", "Payments", "Reports", "Profile"].includes(n as string) : true);
+  const visibleLinks = links.filter(([n]) => user.role === "customer" ? ["Overview", "User Guide", "Products", "Plans", "Subscriptions", "Invoices", "Payments", "Profile"].includes(n as string) : user.role === "staff" ? ["Overview", "User Guide", "Customers", "Quotations", "Subscriptions", "Invoices", "Payments", "Reports", "Profile"].includes(n as string) : true);
 
   return (
     <div className={night ? "app night" : "app"}>
@@ -618,17 +622,15 @@ export function App() {
               <h1>{page === "Overview" ? (user.role === "customer" ? "My Customer Portal" : "Good morning, " + (user.name || "there")) : page}</h1>
               <p>{pageDescriptions[page] || "Manage your subscription operations."}</p>
             </div>
-            {user.role !== "customer" && (
+            {user.role !== "customer" && page !== "User Guide" && (
               <button
                 className="primary"
                 onClick={() => M(
                   page === "Overview" || page === "Subscriptions" ? "New subscription" :
-                  page === "Work" ? "New work item" :
                   page === "Customers" ? "New customer" :
                   page === "Products" ? "New product" :
                   page === "Plans" ? "New plan" :
                   page === "Quotations" ? "New quotation" :
-                  page === "Quotation templates" ? "New quotation template" :
                   page === "Payments" ? "New payment" :
                   page === "Discounts" ? "New discount" :
                   page === "Taxes" ? "New tax" :
@@ -693,6 +695,8 @@ export function App() {
 
           {page === "Profile" ? (
             <ProfilePanel user={user} notify={notice} />
+          ) : page === "User Guide" ? (
+            <GuidePanel setPage={P} quickSwitchRole={quickSwitchRole} user={user} runBilling={runBilling} convertQuote={convertQuote} quotations={d.quotations} invoices={d.invoices} notice={notice} />
           ) : page === "Overview" || page === "Reports" ? (
             <>
               <div className="metrics">
@@ -805,7 +809,6 @@ export function App() {
 
               <div className="tabs">
                 {(
-                  page === "Work" ? ["All", "Open", "In progress", "Blocked", "Closed"] :
                   page === "Invoices" ? ["All", "Draft", "Confirmed", "Sent", "Partial", "Paid", "Overdue", "Cancelled"] :
                   page === "Subscriptions" ? ["All", "Draft", "Quotation", "Confirmed", "Active", "Paused", "Closed"] :
                   page === "Quotations" ? ["All", "Draft", "Sent", "Accepted", "Rejected", "Expired", "Converted"] :
@@ -836,23 +839,21 @@ export function App() {
               ) : (
                 <Table
                   rows={filtered}
-                  onDelete={user.role === "customer" || (k === "workItems" && user.role !== "admin") ? null : (row: any) => remove(k, row)}
+                  onDelete={user.role === "customer" ? null : (row: any) => remove(k, row)}
                   onConvert={k === "quotations" ? (row: any) => convertQuote(row) : null}
-                  onStatusChange={(k === "workItems" && user.role !== "customer") || (k === "staff" && user.role === "admin") || k === "subscriptions" || k === "quotations" || (k === "invoices" && user.role !== "customer") ? updateStatus : null}
+                  onStatusChange={(k === "staff" && user.role === "admin") || k === "subscriptions" || k === "quotations" || (k === "invoices" && user.role !== "customer") ? updateStatus : null}
                   onChangePlan={user.role === "customer" && k === "subscriptions" ? openPlanChange : null}
                   onSend={k === "invoices" && user.role !== "customer" ? sendInvoice : null}
                   onPrint={k === "invoices" ? printInvoice : null}
                   onPay={k === "invoices" ? (row: any) => setPayingInvoice(row) : null}
-                  onEdit={user.role === "customer" || (k === "workItems" && user.role !== "admin") ? null : (row: any) => {
+                  onEdit={user.role === "customer" ? null : (row: any) => {
                     E({ key: k, item: row });
                     M(
                       k === "staff" ? "New staff" :
-                      k === "workItems" ? "New work item" :
                       k === "customers" ? "New customer" :
                       k === "products" ? "New product" :
                       k === "plans" ? "New plan" :
                       k === "quotations" ? "New quotation" :
-                      k === "quotationTemplates" ? "New quotation template" :
                       k === "subscriptions" ? "New subscription" :
                       k === "invoices" ? "New invoice" :
                       k === "payments" ? "New payment" :
@@ -1027,6 +1028,162 @@ export function App() {
           <span>{toast}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function GuidePanel({ setPage, quickSwitchRole, user, runBilling, convertQuote, quotations, notice }: any) {
+  return (
+    <div className="guide-page">
+      <section className="guide-section">
+        <h3>How to Use Brightloop Subscription Management System</h3>
+        <p>
+          Brightloop automates recurring billing for software businesses. Instead of manually maintaining customer renewals in spreadsheets, Brightloop handles the complete lifecycle from sales proposal to subscription, automated invoicing, payment collection, and revenue analytics.
+        </p>
+
+        <div className="demo-flow-strip" style={{ margin: "16px 0 0" }}>
+          <span>Interactive 60-Second Demo: Click each step below to test:</span>
+          <div className="demo-flow-buttons">
+            <button onClick={() => {
+              setPage("Quotations");
+              notice("Step 1: Check Acme Corp's quotation. If Draft, click 'Mark Accepted'. If Accepted, click 'Convert to Subscription'.");
+            }}>
+              1. View & Accept Quotation
+            </button>
+            <button onClick={() => {
+              const accepted = quotations.find((q: any) => q.status === "Accepted");
+              if (accepted) {
+                convertQuote(accepted);
+              } else {
+                setPage("Quotations");
+                notice("Find an Accepted quotation or click 'Mark Accepted' on a Draft quote");
+              }
+            }}>
+              2. Convert to Active Subscription
+            </button>
+            <button onClick={() => {
+              runBilling();
+              setPage("Invoices");
+            }}>
+              3. Run Monthly Invoicing Cycle
+            </button>
+            <button onClick={() => {
+              setPage("Invoices");
+              notice("Click 'Pay Now' on any unpaid invoice to settle it immediately!");
+            }}>
+              4. Settle Invoice & Update Revenue
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="guide-section">
+        <h3>3 User Roles & Access Boundaries</h3>
+        <p>
+          The system enforces strict role-based access control (RBAC). Customer data is isolated so Customer A can never see Customer B's records. Click below to test each persona immediately:
+        </p>
+
+        <div className="guide-role-grid">
+          <div className="guide-role-box">
+            <div>
+              <b>1. Master Admin</b>
+              <small style={{ color: "#7455e8", fontWeight: 600, display: "block", margin: "2px 0 6px" }}>admin@brightloop.local · Brightloop@2026</small>
+              <p>
+                Full administrative control. Configures products, pricing plans, automated tax rules (GST 18%), volume discounts, invites staff employees, and simulates monthly billing runs.
+              </p>
+            </div>
+            <button onClick={() => quickSwitchRole("admin")}>
+              {user?.role === "admin" ? "Current Active View" : "Switch to Admin"}
+            </button>
+          </div>
+
+          <div className="guide-role-box">
+            <div>
+              <b>2. Staff (Sales & Operations)</b>
+              <small style={{ color: "#7455e8", fontWeight: 600, display: "block", margin: "2px 0 6px" }}>sales@brightloop.com · Brightloop@2026</small>
+              <p>
+                Sales and support workspace. Manages customer directory, creates sales quotations, converts accepted quotes to subscriptions, and tracks customer invoices. Cannot manage staff accounts or tax rules.
+              </p>
+            </div>
+            <button onClick={() => quickSwitchRole("staff")}>
+              {user?.role === "staff" ? "Current Active View" : "Switch to Staff"}
+            </button>
+          </div>
+
+          <div className="guide-role-box">
+            <div>
+              <b>3. Customer Portal (Acme Corp)</b>
+              <small style={{ color: "#7455e8", fontWeight: 600, display: "block", margin: "2px 0 6px" }}>contact@acmecorp.com · Brightloop@2026</small>
+              <p>
+                Self-service customer portal. Acme Corp can view their active software tier, download invoices, and pay bills online via UPI/Card with zero visibility into other clients.
+              </p>
+            </div>
+            <button onClick={() => quickSwitchRole("customer")}>
+              {user?.role === "customer" ? "Current Active View" : "Switch to Customer"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="guide-section">
+        <h3>The 5 Core Workflow Stages</h3>
+        <div className="guide-steps-list">
+          <div className="guide-step-row">
+            <span className="guide-step-badge">1</span>
+            <div className="guide-step-body">
+              <b>Products & Pricing Plans</b>
+              <p>
+                Products are what the company sells (e.g. Business Software at ₹1,000/month or Cloud Storage at ₹500/month). Plans define how customers pay (Monthly, Yearly, Weekly, Daily) and seat minimums.
+              </p>
+              <button onClick={() => setPage("Products")}>Open Products Catalog</button>
+            </div>
+          </div>
+
+          <div className="guide-step-row">
+            <span className="guide-step-badge">2</span>
+            <div className="guide-step-body">
+              <b>Sales Quotations</b>
+              <p>
+                When a customer asks for a quote (e.g. "We need 10 seats of Business Software"), staff creates a Quotation. Brightloop automatically calculates line totals, applies volume discounts (10% off for 10+ seats), and adds GST (18%). Staff clicks "Send", and the client accepts.
+              </p>
+              <button onClick={() => setPage("Quotations")}>Open Quotations</button>
+            </div>
+          </div>
+
+          <div className="guide-step-row">
+            <span className="guide-step-badge">3</span>
+            <div className="guide-step-body">
+              <b>Active Subscriptions</b>
+              <p>
+                Once a quotation is accepted, clicking "Convert to Subscription" creates an active recurring contract. The system tracks the start date, renewal cadence, seat count, and next invoice date. Subscriptions can be paused, resumed, or updated with "Change Plan".
+              </p>
+              <button onClick={() => setPage("Subscriptions")}>Open Subscriptions</button>
+            </div>
+          </div>
+
+          <div className="guide-step-row">
+            <span className="guide-step-badge">4</span>
+            <div className="guide-step-body">
+              <b>Automated Recurring Invoices</b>
+              <p>
+                When renewal day arrives, Brightloop automatically generates invoices. In testing, clicking "Simulate monthly billing run" immediately generates recurring invoices for all subscriptions due today.
+              </p>
+              <button onClick={() => setPage("Invoices")}>Open Invoices</button>
+            </div>
+          </div>
+
+          <div className="guide-step-row">
+            <span className="guide-step-badge">5</span>
+            <div className="guide-step-body">
+              <b>Payment Collection & Live Revenue Tracking</b>
+              <p>
+                Customers pay invoices using UPI, Credit Card, or Bank Transfer via the "Pay Now" button. Once paid, the invoice status changes to "Paid", outstanding balance decreases, and the Overview dashboard immediately updates Monthly Recurring Revenue (MRR) and cash collections.
+              </p>
+              <button onClick={() => setPage("Overview")}>View Revenue Dashboard</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

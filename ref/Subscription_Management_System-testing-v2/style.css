@@ -183,5 +183,35 @@ input::placeholder{color:#969bac;opacity:1}
 .night .customer-hero-info p{color:var(--night-muted)}
 .night .customer-hero-stat strong{color:var(--night-text)}
 
+.guide-page{display:flex;flex-direction:column;gap:20px}
+.guide-section{background:#fff;border:1px solid #eaecf0;border-radius:10px;padding:22px;box-shadow:0 1px 2px #1d273008}
+.guide-section h3{font-size:16px;font-weight:700;color:#1e2230;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.guide-section p{font-size:13px;color:#5a6275;line-height:1.6;margin:0 0 16px}
+.guide-role-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+@media(max-width:850px){.guide-role-grid{grid-template-columns:1fr}}
+.guide-role-box{background:#f8f9fc;border:1px solid #e5e8f1;border-radius:8px;padding:16px;display:flex;flex-direction:column;justify-content:space-between}
+.guide-role-box b{font-size:14px;color:#1e2230;display:block;margin-bottom:6px}
+.guide-role-box p{font-size:12px;color:#6b7282;line-height:1.5;margin:0 0 12px;flex:1}
+.guide-role-box button{width:100%;border:1px solid #7455e8;background:#7455e8;color:#fff;border-radius:6px;padding:8px;font-size:12px;font-weight:600;cursor:pointer}
+.guide-role-box button:hover{background:#6344d5}
+.guide-steps-list{display:flex;flex-direction:column;gap:12px}
+.guide-step-row{display:flex;gap:14px;align-items:flex-start;background:#fafbff;border:1px solid #edf0fa;border-radius:8px;padding:14px}
+.guide-step-badge{width:28px;height:28px;border-radius:50%;background:#7455e8;color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;flex-shrink:0}
+.guide-step-body b{display:block;font-size:13px;color:#1d2230;margin-bottom:4px}
+.guide-step-body p{margin:0 0 8px;font-size:12px;color:#5a6275;line-height:1.5}
+.guide-step-body button{border:1px solid #d0d5e2;background:#fff;border-radius:5px;padding:5px 10px;font-size:11px;font-weight:600;color:#555d70;cursor:pointer}
+.guide-step-body button:hover{background:#f0f2f7;border-color:#7455e8;color:#7455e8}
+.night .guide-section{background:var(--night-surface);border-color:var(--night-border)}
+.night .guide-section h3{color:var(--night-text)}
+.night .guide-section p{color:var(--night-muted)}
+.night .guide-role-box{background:var(--night-surface-raised);border-color:var(--night-border)}
+.night .guide-role-box b{color:var(--night-text)}
+.night .guide-role-box p{color:var(--night-muted)}
+.night .guide-step-row{background:var(--night-surface-raised);border-color:var(--night-border)}
+.night .guide-step-body b{color:var(--night-text)}
+.night .guide-step-body p{color:var(--night-muted)}
+.night .guide-step-body button{background:var(--night-surface);border-color:var(--night-border);color:var(--night-text)}
+
+
 
 

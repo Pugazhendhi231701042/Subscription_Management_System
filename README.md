@@ -136,6 +136,45 @@ All accounts share the default password: **`Brightloop@2026`**
 
 ---
 
+## Complete How-To-Use Guide (5-Minute Evaluator Walkthrough)
+
+The entire recurring revenue engine can be tested in 4 simple clicks:
+
+```
+1. PRODUCTS & PLANS  ->  2. QUOTATION  ->  3. SUBSCRIPTION  ->  4. AUTO INVOICING  ->  5. PAYMENT & REVENUE
+```
+
+### The 4-Step Interactive Test Drive:
+1. **Step 1: Review or Create Quotation**
+   - Click **Quotations** in the sidebar.
+   - For any Draft quote (e.g. Acme Corp), click **Mark Accepted**.
+   - Notice the prominent green **`Convert to Subscription`** button appears.
+2. **Step 2: Convert to Active Subscription**
+   - Click **`Convert to Subscription`**.
+   - The quotation immediately converts into an active recurring subscription with start date, next billing date, and seat quantity.
+3. **Step 3: Run the Monthly Billing Cycle**
+   - Click **Overview** in the sidebar.
+   - Click **`Simulate monthly billing run`** (or use the interactive demo bar).
+   - The system scans active subscriptions and automatically generates recurring invoices for subscriptions due today.
+4. **Step 4: Settle Invoice & Update Real-Time Revenue**
+   - Click **Invoices** in the sidebar.
+   - Click **`Pay Now`** on any unpaid invoice.
+   - Select payment method (UPI / Google Pay, Card, Bank Transfer, or Cash) and click **Confirm Payment**.
+   - The invoice marks **Paid**, and the live MRR/ARR analytics and collection charts update instantly!
+
+### Testing the 3 Access Personas:
+Use the **Switch role: [Admin] [Staff] [Customer]** buttons in the top navigation bar to test all 3 personas instantly:
+1. **Master Admin (`admin@brightloop.local` / `Brightloop@2026`)**:
+   - Access to everything: Products, Plans, Taxes (GST 18%), Discounts, Staff Accounts, Billing Simulation, and Financial Reports.
+2. **Staff (`sales@brightloop.com` / `Brightloop@2026`)**:
+   - Sales and operations workspace: Customers, Quotations, Subscriptions, Invoices, and Payments. Cannot manage staff accounts or tax rules.
+3. **Customer Portal (`contact@acmecorp.com` / `Brightloop@2026`)**:
+   - Dedicated customer self-service portal for Acme Corp.
+   - **Strict Data Isolation**: Customer A can **never** see Customer B's invoices or subscriptions.
+   - Acme Corp can view active software contracts, download invoice PDFs, and pay invoices directly with 1 click.
+
+---
+
 ## Key Scenarios to Evaluate
 
 1. **Executive Finance Lead Dashboard**:

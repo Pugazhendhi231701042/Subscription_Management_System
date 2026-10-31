@@ -176,7 +176,14 @@ app.post("/api/auth/register", async (q, s) => {
 app.post("/api/auth/login", async (q, s) => {
   const email = String(q.body.email || "").trim().toLowerCase(), password = String(q.body.password || "");
   let u = connected ? await models.users.findOne({ email }).select("+password") : memory.users.find((x) => String(x.email || "").trim().toLowerCase() === email);
-  if (!u || u.role === "staff" || !await bcrypt.compare(password, u.password)) return s.status(401).json({ error: u?.role === "staff" ? "Staff accounts must sign in with Google using their invited email." : "Invalid email or password" });
+  if (!u) return s.status(401).json({ error: "Invalid email or password" });
+  if (u.role === "staff" && (u.status === "Invited" || !u.password)) {
+    return s.status(401).json({ error: "Staff accounts must sign in with Google using their invited email." });
+  }
+  if (u.role === "staff" && u.status === "Closed") {
+    return s.status(401).json({ error: "This staff account is closed. Contact the master admin." });
+  }
+  if (!await bcrypt.compare(password, u.password)) return s.status(401).json({ error: "Invalid email or password" });
   s.json({ data: { token: jwt.sign({ id: u._id, email: u.email, name: u.name, role: u.role, tokenVersion: u.tokenVersion || 0 }, secret, { expiresIn: "12h" }), user: { email: u.email, name: u.name, role: u.role } } });
 });
 app.post("/api/auth/forgot-password", async (q, s) => {
