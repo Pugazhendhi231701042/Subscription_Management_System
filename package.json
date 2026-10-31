@@ -1,0 +1,21 @@
+{
+  "name": "subscription-management-system",
+  "version": "1.0.0",
+  "description": "Brightloop Subscription Management System - Odoo Hackathon 2026",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "odoo",
+    "hackathon",
+    "subscription-management",
+    "recurring-billing",
+    "erp"
+  ],
+  "author": "Brightloop Team (Pugazhendhi, Nuhaa, Lakshmi Bhargavi, Hemanth)",
+  "license": "MIT"
+}
